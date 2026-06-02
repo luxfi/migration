@@ -25,17 +25,23 @@ The Etna timestamp is baked into existing canonical genesis JSONs (look for `etn
 - Round signer pattern: `RoundSigner` wraps `pulsarm.ThresholdSigner` + `prism.Cut`
 - Threshold certificates carry BLS + Pulsar + ML-DSA signatures in parallel (triple mode)
 
-### Validator identity — ML-DSA hybrid (X-Wing pattern)
-- Classical: X25519 (existing keypair preserved)
-- Post-quantum: ML-DSA-65 (new keypair derived from same mnemonic at canonical path)
-- Composition: à la X-Wing KEM (X25519 + ML-KEM-768) — concatenate classical and PQ pubkeys; sign with both; verify both
-- Old ECDSA validator keys: deprecated at Quasar activation; existing stake records re-anchored to new hybrid pubkey
+### Validator identity — Bindel-Brendel-Fischlin (BBF21 + CDFFJ23) stronger-binding hybrid
+- Classical: **secp256k1 ECDSA** (existing P/X validator keypair preserved; the ECDSA scalar IS the classical sub-key)
+- Post-quantum: ML-DSA-65 (FIPS 204) — new keypair derived from same mnemonic at a sibling BIP-44 leaf
+- Construction (BBF21 N-Sig with CDFFJ23 joint-pubkey binding — NOT raw concat):
+  - `m_bound = SHAKE256-384("lux-hybrid-sig-v1" || left_encode(8·|pk_c|) || pk_c || left_encode(8·|pk_pq|) || pk_pq || left_encode(8·|msg|) || msg)`
+  - `sig_c   = secp256k1.SignHash(sk_c, m_bound[:32])`
+  - `sig_pq  = mldsa65.SignCtx(sk_pq, m_bound, ctx="lux-hybrid-sig-v1")`
+  - `Verify  = AND( secp256k1.VerifyHash(pk_c, m_bound[:32], sig_c), mldsa65.VerifyCtx(pk_pq, m_bound, sig_pq, ctx="lux-hybrid-sig-v1") )`
+- Why BBF, not raw concat: raw concat reduces to MIN security under non-honest-key adversary (CDFFJ23 §4). BBF binds BOTH pubkeys into m_bound so substituting either component invalidates the binding; security ≥ max(EUF-CMA_secp, sEUF-CMA_mldsa).
+- Reference: `~/work/lux/keys/hybrid.go` (implementation), `~/work/lux/keys/proofs/easycrypt/Hybrid_BBF_Binding.ec` (formal theory, 0 admits).
+- Old ECDSA-only validator certs: rejected after Quasar activation timestamp; stake records re-anchored to hybrid pubkey via a P-Chain re-anchor tx that includes BOTH the new hybrid pubkey AND a signed transcript proving control over both keys (joint hybrid signature over the re-anchor envelope).
 
-### NodeID — BTC-style hash-of-hash
-- Pattern: like BTC `HASH160(pubkey) = RIPEMD160(SHA256(pubkey))` — double hash, 20 bytes
-- Lux PQ version: `NodeID = SHAKE256(SHAKE256(serialize(hybrid_pubkey))[:32])[:20]`
-- Replaces the single-SHAKE NodeID from `~/work/lux/keys/service_identity.go` (`SHAKE256-384("NODE_ID_V1" || serviceChainID || 0x42 || pubkey)[:20]`)
-- "Non-deterministic from pubkey" in the cryptographic sense (one-way), deterministic-from-pubkey computationally
+### NodeID — single SHAKE256-384 over wire-form hybrid pubkey
+- `NodeID = SHAKE256-384("NODE_ID_V1" || serviceChainID || 0x42 || wireFormHybridPubkey)[:20]`
+- `wireFormHybridPubkey = left_encode(8·|pk_c|) || pk_c || left_encode(8·|pk_pq|) || pk_pq`
+- Per cryptographer review: single-SHAKE is sound; BTC-style double-hash buys nothing here because SHAKE256-384 is one-way under the standard sponge ROM assumption. The 0x42 scheme byte is preserved — a hybrid identity inherits the existing ML-DSA-65 NodeID scheme.
+- See `~/work/lux/keys/service_identity.go` `DeriveHybridIdentity` for the concrete derivation.
 
 ### EVM Cancun + 42 PQ precompiles on C-Chain
 - `cancunTimestamp`: `1766708400` (was `null`)
@@ -154,15 +160,22 @@ Note `eciesConfig` is EXCLUDED (44th entry; unsafe on public chain).
 
 `upgrade.json` is a runtime config — applying it does NOT change block 0 hash. luxd activates the precompiles at the specified `blockTimestamp` as the chain crosses that timestamp. Since `1766708400` is in the past (June 2026 now), they activate immediately on next block.
 
-### Step 4 — Roll the validator set to ML-DSA hybrid
+### Step 4 — Roll the validator set to BBF-bound hybrid identity
 
-Per task #133:
+Per task #133, with the BBF21+CDFFJ23 binding (NOT raw concat — see Validator identity section above):
+
 - Each validator's mnemonic stays the same.
-- Derive ML-DSA-65 key at canonical path `m/44'/9000'/0'/0'/0' + PQ_BRANCH` (TBD; see `~/work/lux/keys/service_identity.go` extension).
-- Stake record re-anchor: a P-Chain tx adds the new hybrid pubkey alongside the existing ECDSA pubkey, references the same staking weight. After Quasar activation timestamp, ECDSA-only certs are rejected by the network — all validators must have rolled.
-- New NodeID derived from hybrid pubkey via BTC-style double-SHAKE.
+- Derive joint hybrid key via `keys.DeriveHybridIdentity(mnemonic, "lux/validator/<index>")`:
+  - classical (secp256k1): `m/44'/9000'/serviceIndex'/0'/0'`, KDF-mixed with domain `"lux-hybrid-classical-secp256k1-v1"`
+  - PQ (ML-DSA-65): `m/44'/9000'/serviceIndex'/0'/1'`, KDF-mixed with domain `"lux-hybrid-pq-mldsa65-v1"`
+  - The two leaves share the same hardened branches up to the role node; only the leaf index distinguishes them (0 vs 1). Both leaves are hardened.
+- **Stake record re-anchor** (the actual P-Chain tx):
+  - Carries BOTH the new wire-form hybrid pubkey (`HybridPublicKeyBytes`) AND the existing ECDSA pubkey, referencing the same staking weight.
+  - Includes a **proof-of-control transcript** = a hybrid signature (`keys.HybridSign`) over `"lux-reanchor-v1" || existing_ecdsa_pubkey || new_hybrid_pubkey || stake_weight || activation_timestamp`. This signature proves the validator controls BOTH the legacy and the new joint key — the BBF binding makes this single signature unforgeable under either component's break.
+  - After Quasar activation timestamp (`1766708400`), classical-only certs are refused by the staking gate; all validators must have re-anchored before this point or be unstaked.
+- New NodeID: derived from hybrid pubkey via single SHAKE256-384 over `wire-form hybrid pubkey` (no BTC-style double-hash; see Validator identity / NodeID section above).
 
-This is the only step that touches P-Chain state. It cannot be RLP-imported (no archive); it executes as P-Chain transactions issued before the activation timestamp.
+This is the only step that touches P-Chain state. It cannot be RLP-imported (no archive); it executes as P-Chain transactions issued before the activation timestamp. The implementation is at `~/work/lux/keys/hybrid.go` + `~/work/lux/keys/service_identity.go::DeriveHybridIdentity`; the formal theory is at `~/work/lux/keys/proofs/easycrypt/Hybrid_BBF_Binding.ec`.
 
 ### Step 5 — Verification
 

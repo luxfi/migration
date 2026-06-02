@@ -96,69 +96,44 @@ Verify chain head reaches the RLP tip (`eth_blockNumber` returns multi-million h
 
 ### Step 3 — Deploy `upgrade.json` activating Quasar Edition at `1766708400`
 
-Place at `<chain-config-dir>/C/upgrade.json`:
+The canonical `upgrade.json` lives in `~/work/lux/genesis/configs/mainnet/upgrade.json` and is mounted at `<chain-config-dir>/C/upgrade.json` on every luxd pod. The schema has THREE invariants luxd enforces at boot. Violate any and the cluster wedges:
 
-```json
-{
-  "precompileUpgrades": [
-    {"warpConfig": {"blockTimestamp": 0, "quorumNumerator": 67, "requirePrimaryNetworkSigners": true}},
-    {"feeConfigManagerConfig": {"blockTimestamp": 900000000, "...": "..."}},
-    {"mldsaVerify": {"blockTimestamp": 1766708400}},
-    {"slhdsaVerify": {"blockTimestamp": 1766708400}},
-    {"pulsarVerify": {"blockTimestamp": 1766708400}},
-    {"magnetarVerify": {"blockTimestamp": 1766708400}},
-    {"p3qVerify": {"blockTimestamp": 1766708400}},
-    {"coronaThreshold": {"blockTimestamp": 1766708400}},
-    {"hqcEncapsulate": {"blockTimestamp": 1766708400}},
-    {"cggmp21Verify": {"blockTimestamp": 1766708400}},
-    {"frostVerify": {"blockTimestamp": 1766708400}},
-    {"bls12381G1AddConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381G1MulConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381G1MSMConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381G2AddConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381G2MulConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381G2MSMConfig": {"blockTimestamp": 1766708400}},
-    {"bls12381PairingConfig": {"blockTimestamp": 1766708400}},
-    {"blake3Config": {"blockTimestamp": 1766708400}},
-    {"curve25519Config": {"blockTimestamp": 1766708400}},
-    {"x25519Config": {"blockTimestamp": 1766708400}},
-    {"sr25519Verify": {"blockTimestamp": 1766708400}},
-    {"babyjubjubConfig": {"blockTimestamp": 1766708400}},
-    {"pedersenConfig": {"blockTimestamp": 1766708400}},
-    {"poseidonConfig": {"blockTimestamp": 1766708400}},
-    {"pastaConfig": {"blockTimestamp": 1766708400}},
-    {"ringConfig": {"blockTimestamp": 1766708400}},
-    {"hpkeConfig": {"blockTimestamp": 1766708400}},
-    {"mlkemConfig": {"blockTimestamp": 1766708400}},
-    {"xwingConfig": {"blockTimestamp": 1766708400}},
-    {"pqcryptoConfig": {"blockTimestamp": 1766708400}},
-    {"fheConfig": {"blockTimestamp": 1766708400}},
-    {"zkConfig": {"blockTimestamp": 1766708400}},
-    {"aiMiningConfig": {"blockTimestamp": 1766708400}},
-    {"dexConfig": {"blockTimestamp": 1766708400}},
-    {"computeMarketConfig": {"blockTimestamp": 1766708400}},
-    {"bridgeRegistrarConfig": {"blockTimestamp": 1766708400}},
-    {"routerConfig": {"blockTimestamp": 1766708400}},
-    {"stableSwapConfig": {"blockTimestamp": 1766708400}},
-    {"vrfConfig": {"blockTimestamp": 1766708400}},
-    {"graphConfig": {"blockTimestamp": 1766708400}},
-    {"attestationConfig": {"blockTimestamp": 1766708400}},
-    {"anchorConfig": {"blockTimestamp": 1766708400}},
-    {"fixedPointMathConfig": {"blockTimestamp": 1766708400}}
-  ],
-  "stateUpgrades": [],
-  "networkUpgrades": {
-    "evmTimestamp": 0,
-    "durangoTimestamp": 0,
-    "etnaTimestamp": 1735143600,
-    "cancunTimestamp": 1766708400
-  }
-}
+**Invariant 1 — Superset of live activations.** `params/extras.ChainConfig.checkPrecompileCompatible` (evm/params/extras/precompile_upgrade.go:217) walks every already-activated precompile in the running config and requires the new config to keep it at the *same blockTimestamp*. The live `lux-mainnet` StatefulSet inlines 18 precompiles at `blockTimestamp:0` (universe/k8s/lux-mainnet/luxd-startup.yaml line 182), so those 18 entries MUST stay at `blockTimestamp:0` in the canonical upgrade.json:
+
+```
+aiMiningConfig, blake3Config, cggmp21Verify,
+deadZeroConfig, deadConfig, deadFullConfig,
+dexConfig, routerConfig,
+fheConfig, frostVerify, graphConfig, hpkeConfig,
+mldsaVerify, mlkemConfig, pqcryptoConfig,
+ringConfig, slhdsaVerify, zkConfig
 ```
 
-Note `eciesConfig` is EXCLUDED (44th entry; unsafe on public chain).
+Rescheduling any of these to `1766708400` (or omitting them) → boot fails with `mismatching PrecompileUpgrade` / `missing PrecompileUpgrade`. Regression test: `evm/params/extras/precompile_upgrade_rollout_test.go::TestMainnetUpgradeJSON_IsForwardCompatibleWithLiveActivations`.
 
-`upgrade.json` is a runtime config — applying it does NOT change block 0 hash. luxd activates the precompiles at the specified `blockTimestamp` as the chain crosses that timestamp. Since `1766708400` is in the past (June 2026 now), they activate immediately on next block.
+**Invariant 2 — Strict-PQ profile.** Two complementary surfaces switch on the same posture:
+
+1. `networkUpgradeOverrides.strictPQTimestamp = 1766708400` in `upgrade.json`. This pins `NetworkUpgrades.StrictPQTimestamp` and exposes the `StrictPQReporter` interface to `contract.RefuseUnderStrictPQ`, which classical Lux stateful precompiles call at the top of their `Run()`:
+   - bls12-381 G1/G2 add/mul/MSM/pairing
+   - sr25519, x25519, curve25519, ed25519
+   - babyjubjub, pedersen, pasta, poseidon, ring, hpke
+   - frostVerify, cggmp21Verify (ECDSA threshold — refused under strict-PQ; hybrid validators MUST migrate to PQ-only certs before activation per Step 4)
+   - kzg4844Config, zk (classical SNARK wrappers — refused)
+2. `pq: true` in `~/work/lux/state/chain-configs/lux-mainnet/config.json` (the EVM plugin config mounted at `<chain-config-dir>/<CID>/config.json`). This:
+   - sets `vm.chainConfig.PQ = gethvm.AllForbidden()` covering the 0x01–0x09 standard precompiles (ecrecover, sha256/ripemd/blake2F, alt_bn128 add/mul/pairing, blake2F, KZG point eval)
+   - and forces `StrictPQTimestamp = &0` on the extras config so the Lux precompile gate fires from genesis on freshly-rebuilt nodes too
+
+Both surfaces are required. The upgrade.json side activates the gate on the running mainnet at the Quasar timestamp; the chain-config side pins the same posture for nodes that rebuild state from scratch. Regression tests: `TestMainnetUpgradeJSON_HasStrictPQActivation`, `TestMainnetChainConfig_HasStrictPQTrue`.
+
+**Invariant 3 — Warp policy.** `warpConfig.requirePrimaryNetworkSigners = true` MUST be set so every cross-chain warp message is signed by primary-network validators (not a subnet quorum). The live config sets it; the canonical upgrade.json keeps it. Regression: `TestMainnetUpgradeJSON_WarpRequiresPrimaryNetworkSigners`.
+
+**Cancun is genesis-time, not upgrade-time.** Cancun activates from genesis automatically — `vm.parseGenesis` (evm/plugin/evm/vm.go:709-712) forces `ShanghaiTime` and `CancunTime` to 0 if not set. The earlier `cancunTimestamp` field inside `networkUpgrades` (sic) was unrecognized and silently dropped. Do not add it back.
+
+**Field name is `networkUpgradeOverrides`, NOT `networkUpgrades`.** `UpgradeConfig` (evm/params/extras/config.go:141) reads the override block from `networkUpgradeOverrides`. Earlier drafts wrote `networkUpgrades`, which JSON-unmarshalled to nothing — the override was silently ignored.
+
+**Field name is `feeManagerConfig`, NOT `feeConfigManagerConfig`.** The registered module key is `feeManagerConfig` (evm/precompile/contracts/feemanager/module.go:19); earlier drafts wrote the longer string, which `UpgradeConfig.UnmarshalJSON` rejected with "unknown precompile config".
+
+`upgrade.json` is a runtime config — applying it does NOT change block 0 hash. luxd activates the precompiles at the specified `blockTimestamp` as the chain crosses that timestamp. Since `1766708400` is in the past (June 2026 now), they activate immediately on the next block.
 
 ### Step 4 — Roll the validator set to BBF-bound hybrid identity
 

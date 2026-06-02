@@ -152,7 +152,81 @@ Per task #133, with the BBF21+CDFFJ23 binding (NOT raw concat — see Validator 
 
 This is the only step that touches P-Chain state. It cannot be RLP-imported (no archive); it executes as P-Chain transactions issued before the activation timestamp. The implementation is at `~/work/lux/keys/hybrid.go` + `~/work/lux/keys/service_identity.go::DeriveHybridIdentity`; the formal theory is at `~/work/lux/keys/proofs/easycrypt/Hybrid_BBF_Binding.ec`.
 
-### Step 5 — Verification
+### Step 5 — Coordinated luxd image swap (closure-swarm, 2026-06-02)
+
+The closure-swarm pushed a clean v1.28.15 with the latest semver everywhere
+(consensus v1.25.13, threshold v1.9.7, magnetar v1.2.0, pulsar v1.1.2,
+keys v1.1.0, accel v1.1.8). NO weird hybrid tag — earlier
+`v1.28.7-corona-v0.7.6` and `v1.25.5-corona-v0.7.6` compat tags were
+deleted from both origin and local. There is no env-var dual-mode codec.
+Main is strict v0.7.6 wire.
+
+Because every closure-swarm tag commits to a single wire shape, this is
+a **coordinated full-network restart**, not a rolling upgrade. Brief
+outage, clean upgrade. Pre-flight: confirm GHCR has
+`ghcr.io/luxfi/node:v1.28.15` for `linux/amd64` (arm64 paused per
+memory:multiarch_builds — DOKS has no arm64 droplets):
+
+```bash
+docker manifest inspect ghcr.io/luxfi/node:v1.28.15 | head -10
+```
+
+Procedure (mainnet — same shape for devnet/testnet):
+
+```bash
+# Cluster: DOKS lux-k8s, namespace lux-mainnet
+NS=lux-mainnet
+SS=luxd
+
+# 1. Snapshot validator IDs (for re-anchor verification at step 4 if needed)
+kubectl -n "$NS" exec sts/${SS}-0 -- curl -s http://localhost:9650/ext/bc/P \
+  -d '{"jsonrpc":"2.0","method":"platform.getCurrentValidators","params":{},"id":1}' \
+  > /tmp/validators-pre-v1.28.15.json
+
+# 2. STOP all 5 luxd pods simultaneously (sybil-protection requires the
+#    set goes down together — staggered downs can wedge the P-chain at
+#    h<n while peers still expect a quorum).
+kubectl -n "$NS" scale sts/${SS} --replicas=0
+kubectl -n "$NS" wait pod -l app.kubernetes.io/name=luxd \
+  --for=delete --timeout=120s
+
+# 3. Apply the v1.28.15 manifest (the LuxNetwork CR's spec.image.tag is
+#    already pinned via the universe/k8s/lux-mainnet/network.yaml on
+#    branch bump/luxd-v1.28.15-closure-swarm — merge or use kustomize).
+kubectl -n "$NS" kustomize . | kubectl -n "$NS" apply -f -
+
+# 4. START all 5 pods simultaneously.
+kubectl -n "$NS" scale sts/${SS} --replicas=5
+
+# 5. Watch consensus quorum form. Expected: ~30-60s to reach quorum
+#    once 4 of 5 pods are Ready; full sync once 5/5.
+kubectl -n "$NS" rollout status sts/${SS} --timeout=600s
+kubectl -n "$NS" logs sts/${SS}-0 --tail=50 | grep -E "quorum|consensus|started"
+
+# 6. Health probe (must succeed within 2min of restart)
+for i in 0 1 2 3 4; do
+  echo "=== luxd-$i ==="
+  kubectl -n "$NS" exec sts/${SS}-$i -- curl -s http://localhost:9650/ext/health \
+    | jq '.healthy'
+done
+```
+
+Per global rule "NEVER wipe luxd /data/db" (memory:luxd_db_wipe_lesson) —
+the StatefulSet must NOT have its PVCs touched. The bump is image-only.
+
+Pre-flight gates before STOP:
+1. All 5 pods Ready + healthy
+2. No active C-Chain import (`admin_isImporting` returns false)
+3. Validator set count = 5 (no in-flight stake-record re-anchors)
+4. KMS reachable (`kubectl -n hanzo logs sts/kms-0 --tail=5` is steady)
+5. Universe manifest PR merged into main, or you're applying from the
+   `bump/luxd-v1.28.15-closure-swarm` branch directly
+
+Rollback: revert to v1.28.7 (the last known-good production image
+before the closure-swarm series) — same procedure, swap the image tag
+in the LuxNetwork CR.
+
+### Step 6 — Verification (post-restart)
 
 ```bash
 # Block 0 hash matches RLP expectation

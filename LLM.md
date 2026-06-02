@@ -66,11 +66,11 @@ The Etna timestamp is baked into existing canonical genesis JSONs (look for `etn
 |---|---|---|---|
 | P-Chain | No (DB-only, sybil-protected) | n/a | New ML-DSA hybrid validator certs + BTC-style NodeID after Quasar timestamp |
 | X-Chain | No (DB-only) | n/a | UTXO format unchanged; address derivation paths unchanged |
-| C-Chain | `~/work/lux/state/rlp/lux-mainnet/lux-mainnet-96369.rlp` (1.2GB) | `~/work/lux/state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` (hashes to `0x595e9630575e6b596ae78bdf1c6f191fb18a1275d5939b46c26f19dff077f6a7`) | Cancun + 42 PQ precompiles forward-dated at `1766708400` |
+| C-Chain | `~/work/lux/state/rlp/lux-mainnet/lux-mainnet-96369.rlp` (1.2GB) | `~/work/lux/state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` (hashes to `0x067668d0`) | Cancun + 42 PQ precompiles forward-dated at `1766708400` |
 
 ### Step 1 — Mount `genesis.original.json` as canonical mainnet C-Chain genesis
 
-The C-Chain RLP archive expects block 0 hash `0x595e9630...` — which is what `genesis.original.json` produces. The current `genesis.json` in the same dir (and the one in `~/work/lux/genesis/configs/mainnet/cchain.json`) added later fields and now hashes to `0x3f4fa2a0...`. That mismatch is why every recent attempt to import the RLP failed.
+The C-Chain RLP archive expects block 0 hash `0x067668d0...` — which is what `genesis.original.json` produces. The current `genesis.json` in the same dir (and the one in `~/work/lux/genesis/configs/mainnet/cchain.json`) added later fields and now hashes to `0x3f4fa2a0...`. That mismatch is why every recent attempt to import the RLP failed.
 
 ```bash
 # luxd start args for the C-Chain (production)
@@ -232,7 +232,7 @@ in the LuxNetwork CR.
 # Block 0 hash matches RLP expectation
 curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0",false],"id":1}' \
   | jq -r '.result.hash'
-# Expected: 0x595e9630575e6b596ae78bdf1c6f191fb18a1275d5939b46c26f19dff077f6a7
+# Expected: 0x067668d0
 
 # Chain tip > 1M
 curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
@@ -304,7 +304,7 @@ For chains WITHOUT archival history (hanzo-mainnet, pars-mainnet, all testnet/de
 ## Verification Checklist (Quasar Edition production readiness)
 
 - [ ] luxd boots with `--genesis-file=<genesis.original.json>` on all 5 mainnet pods
-- [ ] `eth_getBlockByNumber 0x0` returns `0x595e9630575e6b596ae78bdf1c6f191fb18a1275d5939b46c26f19dff077f6a7` on all pods
+- [ ] `eth_getBlockByNumber 0x0` returns `0x067668d0` on all pods
 - [ ] `admin_importChain` succeeds; `eth_blockNumber` > 1M
 - [ ] `upgrade.json` mounted at `<chain-config-dir>/C/upgrade.json` with 42 Quasar precompiles at `blockTimestamp: 1766708400`
 - [ ] Each precompile address responds (`eth_getCode` returns `0x01` sentinel)

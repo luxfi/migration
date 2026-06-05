@@ -11,7 +11,7 @@ The Quasar Edition is what Lux Primary Network + C-Chain MUST be running. All hi
 | Era | Timestamp | Unix | What activates |
 |---|---|---|---|
 | **Etna** (already done) | Dec 25 2024 16:20 UTC | `1735143600` | C-Chain modern EVM forks (Berlin/London/Shanghai), Etna/Fortuna/Granite protocol upgrades, Warp precompile |
-| **Quasar Edition** (target) | Dec 25 2025 16:20 PST (= Dec 26 00:20 UTC) | `1766708400` | Quasar consensus (Pulsar + Corona + Magnetar + Polaris), 42 PQ precompiles, ML-DSA hybrid validator identity (X-Wing pattern), BTC-style hash-of-hash NodeID, Cancun |
+| **Quasar Edition** (target) | Dec 25 2025 16:20 PST (= Dec 26 00:20 UTC) | `1766708400` | Quasar consensus (Pulsar + Corona + Magnetar + Polaris), 42 PQ precompiles, ML-DSA hybrid validator identity (X-Wing pattern), single SHAKE256-384 NodeID (sponge ROM one-way; XOFs aren't length-extendable so no BTC-style double-hash is needed; see Validator identity section L43, L151), Cancun |
 
 The Etna timestamp is baked into existing canonical genesis JSONs (look for `etnaTimestamp: 1735143600`). The Quasar timestamp is delivered via `upgrade.json` forward-dating, NEVER baked into genesis (would break block 0 identity and existing RLP archives).
 
@@ -310,7 +310,7 @@ For chains WITHOUT archival history (hanzo-mainnet, pars-mainnet, all testnet/de
 - [ ] Each precompile address responds (`eth_getCode` returns `0x01` sentinel)
 - [ ] Cancun behavior active (test blob tx if blob support intended)
 - [ ] All 5 validators present hybrid (ECDSA + ML-DSA) pubkeys via `platform.getCurrentValidators`
-- [ ] NodeID derived via BTC-style double-SHAKE on each pod (`info.getNodeID` matches `SHAKE256(SHAKE256(serialize(hybrid_pubkey))[:32])[:20]`)
+- [ ] NodeID derived via single SHAKE256-384 on each pod (`info.getNodeID` matches `SHAKE256-384("NODE_ID_V1" || serviceChainID || 0x42 || serialize(hybrid_pubkey))[:20]` per `keys/service_identity.go:549-553`; single-pass is sound under sponge ROM, XOFs aren't length-extendable, so no BTC-style double-hash is needed)
 - [ ] Bridge round-trip: send tokens C-Chain → Zoo L2 → C-Chain via Warp + sBridge contract
 - [ ] DEX swap: AMM router + WLUX/sLUX/sZOO swap works
 - [ ] Vault: deposit + withdraw works against latest `~/work/lux/standard` contracts

@@ -12,7 +12,9 @@ OWNER   = "0x9011e888251ab053b7bd1cdb598db4f9ded94714"
 SAFE    = "0x51284dc2133e8d3a8e213dca6a6fa768cfdfcce2"
 WLUX    = "0x4888e4a2ee0f03051c72d2bd3acf755ed3498b3e"
 LETH    = "0x60e0a8167fc13de89348978860466c9cec24b9ba"
-KCTX, KNS, KPOD = "do-sfo3-lux-k8s", "lux-mainnet", "luxd-1"
+KCTX = os.environ.get("KCTX", "do-sfo3-lux-k8s")
+KNS  = os.environ.get("KNS", "lux-mainnet")
+KPOD = os.environ.get("KPOD", "luxd-1")
 
 def rpc(batch):
     body = json.dumps(batch).encode()

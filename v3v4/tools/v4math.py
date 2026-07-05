@@ -4,6 +4,8 @@ solidity TickMath.getSqrtPriceAtTick and SqrtPriceMath.getAmount{0,1}Delta).
 Used to compute V4 add requirements (roundUp=True) and validate against the
 on-chain V3 decreaseLiquidity simulation (roundUp=False).
 """
+import decimal, math
+
 Q96 = 1 << 96
 MIN_TICK = -887272
 MAX_TICK = 887272
@@ -67,14 +69,12 @@ def get_amount1_delta(sqrtA: int, sqrtB: int, L: int, round_up: bool) -> int:
 
 def sqrt_price_x96_from_price(price) -> int:
     """price = token1 per token0 (already decimal-adjusted). Returns floor(sqrt(price)*2^96)."""
-    import decimal
     decimal.getcontext().prec = 80
     d = decimal.Decimal
     return int((d(str(price)).sqrt()) * (d(2) ** 96))
 
 def get_tick_at_sqrt_price(sqrtP: int) -> int:
     """Largest tick t with get_sqrt_ratio_at_tick(t) <= sqrtP (matches solidity)."""
-    import math
     price = (sqrtP / (1 << 96)) ** 2
     t = int(math.floor(math.log(price) / math.log(1.0001)))
     t = max(MIN_TICK, min(MAX_TICK - 1, t))

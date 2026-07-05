@@ -4,6 +4,12 @@
 
 The Quasar Edition is what Lux Primary Network + C-Chain MUST be running. All historical archives import cleanly against the original genesis; Quasar Edition rules activate forward-dated via `upgrade.json`, preserving block 0 identity.
 
+> **Not this doc:** the DEX **V3 → V4 liquidity migration** is a separate, self-contained
+> toolkit in [`v3v4/`](v3v4/RUNBOOK.md) (chainId 96369). It **EXECUTED 2026-07-05** — V4
+> PoolManager `0x2e317c5ce2c3e3aa720a3bb7f366f5959d940d4c`, LiquidityDeployer
+> `0x9888015bd7cda1905bbebf560f800731772957fd` (owned by the DAO Safe). It is unrelated to
+> the Quasar network migration below; read `v3v4/RUNBOOK.md` for it.
+
 ---
 
 ## Two Activation Eras (do not conflate)

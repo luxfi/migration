@@ -3,16 +3,12 @@
 Enumerate 0x9011's V3 positions on Lux mainnet C-Chain (96369) and simulate a
 50% decreaseLiquidity for each, entirely READ-ONLY (eth_call). No broadcast.
 
-Reads via the forwarded RPC (kubectl port-forward luxd-1 9631:9630).
-Outputs a structured JSON snapshot used by the accounting + staged script.
+Reads over `kubectl exec` into a validator (no port-forward needed) — the same
+transport execute.py uses. Writes tools/snapshot.json for build_plan.py.
 """
-import json, sys, os, urllib.request
+import json, sys, os, subprocess
 from eth_abi import encode as abi_encode, decode as abi_decode
-from eth_abi.exceptions import DecodingError
 
-RPC = os.environ.get("RPC", "http://localhost:9631/v1/bc/C/rpc")
-# Transport: "http" (port-forward) or "kubectl" (exec curl, no port-forward needed)
-TRANSPORT = os.environ.get("TRANSPORT", "http")
 KCTX = os.environ.get("KCTX", "do-sfo3-lux-k8s")
 KNS  = os.environ.get("KNS", "lux-mainnet")
 KPOD = os.environ.get("KPOD", "luxd-1")
@@ -26,17 +22,12 @@ DEADLINE = 1 << 63
 _id = [0]
 def _rpc(batch):
     body = json.dumps(batch).encode()
-    if TRANSPORT == "kubectl":
-        import subprocess
-        p = subprocess.run(
-            ["kubectl", "--context", KCTX, "-n", KNS, "exec", "-i", KPOD, "--",
-             "curl", "-s", "-X", "POST", "http://localhost:9630/v1/bc/C/rpc",
-             "-H", "content-type:application/json", "-d", "@-"],
-            input=body, capture_output=True, timeout=180)
-        return json.loads(p.stdout)
-    req = urllib.request.Request(RPC, data=body, headers={"content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read())
+    p = subprocess.run(
+        ["kubectl", "--context", KCTX, "-n", KNS, "exec", "-i", KPOD, "--",
+         "curl", "-s", "-X", "POST", "http://localhost:9630/v1/bc/C/rpc",
+         "-H", "content-type:application/json", "-d", "@-"],
+        input=body, capture_output=True, timeout=180)
+    return json.loads(p.stdout)
 
 def call(to, data, frm=None):
     _id[0] += 1
@@ -163,8 +154,8 @@ def main():
         raw_sym = m_raw[f"sym{tkn}"]
         try:
             symbol = dec(["string"], raw_sym)[0]
-        except (DecodingError, Exception):
-            # some tokens return bytes32 symbol
+        except Exception:
+            # some tokens return a bytes32 (fixed) symbol instead of a string
             symbol = bytes.fromhex(raw_sym[2:]).rstrip(b"\x00").decode("latin1") if raw_sym else "?"
         decimals = int(m_raw[f"dec{tkn}"], 16)
         tokmeta[tkn] = {"symbol": symbol, "decimals": decimals}
@@ -174,14 +165,14 @@ def main():
 
     snapshot = dict(
         owner=OWNER, npm=NPM, factory=FACTORY,
-        blockRpc=RPC,
+        blockRpc=f"kubectl exec -n {KNS} {KPOD} -- curl localhost:9630/v1/bc/C/rpc",
         positions=positions,
         pools=[{**v, "token0sym": tokmeta[v["token0"]]["symbol"], "token1sym": tokmeta[v["token1"]]["symbol"],
                 "dec0": tokmeta[v["token0"]]["decimals"], "dec1": tokmeta[v["token1"]]["decimals"]}
                for v in pools.values()],
         tokens=tokmeta,
     )
-    out = os.environ.get("OUT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "snapshot.json"))
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snapshot.json")
     with open(out, "w") as f:
         json.dump(snapshot, f, indent=2)
     print(f"wrote {out}: {len(positions)} positions, {len(pools)} pools", file=sys.stderr)

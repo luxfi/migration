@@ -31,7 +31,7 @@ setup: ## clone pinned v4-core deps if missing (deterministic build inputs)
 	@bash scripts/setup.sh
 
 snapshot: ## enumerate treasury V3 positions from live chain
-	cd $(TOOLS) && TRANSPORT=kubectl KCTX=$(KCTX) KNS=$(KNS) python3 snapshot.py
+	cd $(TOOLS) && KCTX=$(KCTX) KNS=$(KNS) python3 snapshot.py
 
 investigate: ## full NPM ownership map (all 149 NFTs) + LETH resolution
 	cd $(TOOLS) && KCTX=$(KCTX) KNS=$(KNS) python3 investigate_all.py

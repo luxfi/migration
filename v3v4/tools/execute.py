@@ -13,23 +13,20 @@ including a full network RLP reboot, resumes exactly where it left off.
 
 NOTHING here is Lux-network-migration (Quasar) related; this is the DEX LP move.
 
-Env:
+Env (all optional; the Makefile wires the operator-tunable ones):
   EXECUTE=1            broadcast for real (default 0 = dry-run)
-  LUX_PRIVATE_KEY      signer key (execute mode only; read from k8s secret lux-deployer)
-  GAS_PRICE_GWEI=250   legacy gasPrice (>=~250 to clear block gas cost). A baseFee>gasPrice
-                       preflight aborts (execute mode) so txs never silently fail to mine.
+  LUX_PRIVATE_KEY      signer key (execute mode only; from k8s secret lux-deployer)
+  GAS_PRICE_GWEI=250   legacy gasPrice; must exceed baseFee or txs never mine (preflight aborts)
   SLIPPAGE_BPS=100     min-out / max-in tolerance (1%)
   ONESIDED_BAND_TICKS=6900   width of the one-sided resting-bid ladder
-  ORACLE_TICK_BAND=2000      max |oracleTick - expected_tick| for a one-sided bid (~+/-22%).
-  ONESIDED_MAX_WLUX=5000000e18  hard cap on WLUX deposited into any one one-sided pool.
-  FINALIZE=1           opt-in (default 0): after all adds, zero LD approvals + transferOwnership
-                       LD->DAO. Dry-run always PREVIEWS it; execute only performs it when =1.
+  ORACLE_TICK_BAND=2000      max |oracleTick - expected_tick| for a one-sided bid (~+/-22%)
+  ONESIDED_MAX_WLUX=5000000e18  hard cap on WLUX deposited into any one one-sided pool
+  FINALIZE=1           opt-in: after all adds, zero LD approvals + transferOwnership LD->DAO Safe.
+                       Dry-run always PREVIEWS it; execute performs it only when =1.
   KCTX,KNS             kube context / namespace
-  RPC_PODS=luxd-0,..,luxd-4  broadcast targets
-  ORACLE=oracle.json   per one-sided base an OBJECT: {"LBTC":{"price":63166.4,"expected_tick":85282},
-                       "LAVAX":{"price":6.983,"expected_tick":-5823}, "LUX_USD":12.5}. price=base USD;
-                       expected_tick is the SECOND operator's independent tick anchor (2-op confirm).
-  PLAN,STATE           file paths
+  RPC_PODS=luxd-0,..,luxd-4  the validators every tx is broadcast to (mainnet has no gossip)
+  ORACLE=oracle.json   per one-sided base an OBJECT {"price":<baseUSD>,"expected_tick":<2nd-op tick>},
+                       plus "LUX_USD". expected_tick is a SECOND operator's independent anchor.
 """
 import os, sys, json, subprocess, time
 from eth_abi import encode as abi_encode, decode as abi_decode
@@ -39,14 +36,14 @@ from eth_account import Account
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from v4math import (get_sqrt_ratio_at_tick, get_tick_at_sqrt_price, sqrt_price_x96_from_price,
-                    align_tick, liquidity_for_amount1, get_amounts_for_liquidity, Q96)
+                    align_tick, liquidity_for_amount0, liquidity_for_amount1, get_amounts_for_liquidity)
 
 # ---- config -----------------------------------------------------------------
 CHAIN_ID = 96369
 KCTX = os.environ.get("KCTX", "do-sfo3-lux-k8s")
 KNS = os.environ.get("KNS", "lux-mainnet")
 RPC_PODS = os.environ.get("RPC_PODS", "luxd-0,luxd-1,luxd-2,luxd-3,luxd-4").split(",")
-READ_POD = os.environ.get("READ_POD", RPC_PODS[1] if len(RPC_PODS) > 1 else RPC_PODS[0])
+READ_POD = RPC_PODS[1]  # reads hit one validator; every signed tx still fans out to all of RPC_PODS
 GAS_PRICE_WEI = int(float(os.environ.get("GAS_PRICE_GWEI", "250")) * 1e9)
 EXECUTE = os.environ.get("EXECUTE", "0") == "1"
 SLIPPAGE_BPS = int(os.environ.get("SLIPPAGE_BPS", "100"))
@@ -58,19 +55,20 @@ ORACLE_TICK_BAND = int(os.environ.get("ORACLE_TICK_BAND", "2000"))
 ONESIDED_MAX_WLUX = int(float(os.environ.get("ONESIDED_MAX_WLUX", str(5_000_000 * 10**18))))
 # opt-in (gated): after all adds, zero LD approvals + hand LD ownership to the DAO Safe.
 FINALIZE = os.environ.get("FINALIZE", "0") == "1"
-PLAN = os.environ.get("PLAN", os.path.join(HERE, "plan.json"))
-STATE = os.environ.get("STATE", os.path.join(HERE, "state.json"))
 ORACLE = os.environ.get("ORACLE", os.path.join(HERE, "oracle.json"))
+PLAN = os.path.join(HERE, "plan.json")
+STATE = os.path.join(HERE, "state.json")
 OWNER = "0x9011E888251AB053B7bD1cdB598Db4f9DED94714"
 DAO_SAFE = "0x51284dc2133e8d3a8e213dca6a6fa768cfdfcce2"
 NPM = "0x7a4C48B9dae0b7c396569b34042fcA604150Ee28"
-V4CORE_ART = os.environ.get("V4CORE_ART", os.path.expanduser(
-    "~/work/lux-amm/v4-core/out/PoolManager.sol/PoolManager.json"))
-LD_ART = os.environ.get("LD_ART", os.path.join(HERE, "..", "contracts", "out",
-                                               "LiquidityDeployer.sol", "LiquidityDeployer.json"))
+# Deployable bytecode, from the canonical build locations. v4-core is reached via the
+# contracts/lib/v4-core symlink, so there is no absolute ~/work path to keep in sync.
+V4CORE_ART = os.path.join(HERE, "..", "contracts", "lib", "v4-core", "out",
+                          "PoolManager.sol", "PoolManager.json")
+LD_ART = os.path.join(HERE, "..", "contracts", "out",
+                      "LiquidityDeployer.sol", "LiquidityDeployer.json")
 DEADLINE = 1 << 63
 U128MAX = (1 << 128) - 1
-ZERO = "0x0000000000000000000000000000000000000000"
 
 # ---- rpc via kubectl exec (works without port-forward) ----------------------
 _id = [0]
@@ -196,16 +194,6 @@ FATAL_NONCE = ("nonce too low", "nonce too high", "invalid nonce", "nonce is too
 
 def _read_nonce(block="pending"):
     return int(rpc("eth_getTransactionCount", [OWNER, block]), 16)
-
-def _await_pending_nonce(target, timeout=15):
-    """READ_POD's pending nonce, waiting out brief post-mine validator lag until it
-    reaches `target` (bounded — never loops forever)."""
-    t0 = time.time()
-    live = _read_nonce("pending")
-    while live < target and time.time() - t0 < timeout:
-        time.sleep(2)
-        live = _read_nonce("pending")
-    return live
 
 def _nonce():
     if NONCE[0] is None:
@@ -563,7 +551,6 @@ def compute_onesided_bid(op, oracle, tag):
         tl = align_tick(tick_o, spacing, up=True)
         tu = align_tick(tl + ONESIDED_BAND_TICKS, spacing, up=True)
         sL, sU = get_sqrt_ratio_at_tick(tl), get_sqrt_ratio_at_tick(tu)
-        from v4math import liquidity_for_amount0
         L = liquidity_for_amount0(sL, sU, wlux_amt)
         req = get_amounts_for_liquidity(sqrtP, tl, tu, L, True)[0]
         while req > wlux_amt and L > 0:

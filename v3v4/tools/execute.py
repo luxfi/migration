@@ -33,7 +33,7 @@ Env:
 """
 import os, sys, json, subprocess, time
 from eth_abi import encode as abi_encode, decode as abi_decode
-from eth_utils import keccak
+from eth_utils import keccak, to_checksum_address
 from eth_account import Account
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,7 +99,7 @@ def call_raw(to, data_hex, frm=OWNER):
 def estimate(to, data_hex, value=0, create=False):
     tx = {"from": OWNER, "data": data_hex, "value": hex(value)}
     if not create:
-        tx["to"] = to
+        tx["to"] = to_checksum_address(to)
     return int(rpc("eth_estimateGas", [tx]), 16)
 
 # ---- abi encoders -----------------------------------------------------------
@@ -213,13 +213,36 @@ def _nonce():
     if not EXECUTE:
         return NONCE[0]  # dry-run: never signs; used only for CREATE-address prediction
     expected = NONCE[0]
-    live = _await_pending_nonce(expected)
-    if live != expected:
+    # Concurrent-signer detection via the LATEST (mined) nonce, NOT pending. On a no-gossip
+    # chain our just-broadcast tx may sit in ONE node's mempool while READ_POD's pending nonce
+    # still reads lower — so a pending==expected equality check false-aborts against our OWN
+    # in-flight txs. The real hazard is a tx WE DID NOT SEND mining at/above our next nonce:
+    # that only happens if another process signs 0x9011. latest > expected catches exactly that.
+    latest = _read_nonce("latest")
+    if latest > expected:
         raise RuntimeError(
-            f"NONCE DRIFT: {OWNER} pending nonce {live} != expected {expected}. Another "
-            f"process is signing 0x9011 (or READ_POD is lagging) — PAUSE it and re-run "
+            f"NONCE DRIFT: {OWNER} latest MINED nonce {latest} > our next {expected}. A "
+            f"concurrent signer took our nonce — PAUSE it (suspend chain-heartbeat) and re-run "
             f"(idempotent; completed steps skip).")
     return expected
+
+def _our_tx_mined(txhash, tries=6, delay=2):
+    """Poll every validator for OUR tx's receipt (no-gossip: it may be on any one node).
+    Returns True if it mined with status 1. Short poll — the tx either already mined
+    (that is why a peer said nonce-low) or it did not."""
+    for _ in range(tries):
+        for pod in RPC_PODS:
+            try:
+                r = rpc("eth_getTransactionReceipt", [txhash], pod=pod)
+                if r:
+                    if int(r["status"], 16) != 1:
+                        raise RuntimeError(f"tx {txhash} REVERTED (status 0)")
+                    return True
+            except RuntimeError as e:
+                if "REVERTED" in str(e):
+                    raise
+        time.sleep(delay)
+    return False
 
 def sign_and_broadcast(to, data_hex, gas, value=0, create=False):
     key = os.environ["LUX_PRIVATE_KEY"]
@@ -227,7 +250,7 @@ def sign_and_broadcast(to, data_hex, gas, value=0, create=False):
     tx = {"nonce": nonce, "gasPrice": GAS_PRICE_WEI, "gas": gas, "value": value,
           "data": data_hex, "chainId": CHAIN_ID}
     if not create:
-        tx["to"] = to
+        tx["to"] = to_checksum_address(to)
     signed = Account.sign_transaction(tx, key)
     raw = "0x" + signed.raw_transaction.hex()
     txhash = "0x" + keccak(signed.raw_transaction).hex()
@@ -239,15 +262,33 @@ def sign_and_broadcast(to, data_hex, gas, value=0, create=False):
         except RuntimeError as e:
             msg = str(e).lower()
             if any(k in msg for k in FATAL_NONCE):
-                raise RuntimeError(
-                    f"FATAL nonce error from {pod} on tx {txhash} (nonce={nonce}): "
-                    f"{str(e)[:140]}. Treasury nonce desynced (concurrent signer?). Aborting "
-                    f"BEFORE the receipt wait — pause the other signer and re-run (idempotent).")
+                # NO-GOSSIP RECONCILE: on a chain whose mempool does not gossip we broadcast to
+                # ALL validators; a tx can MINE via one node and then a LATER node reports "nonce
+                # too low" for the SAME (now-consumed) nonce — that is SUCCESS, not a conflict.
+                # Distinguish: (a) OUR txhash already mined -> success; (b) a DIFFERENT tx took our
+                # nonce (our txhash absent AND latest nonce > ours) -> real concurrent signer, abort.
+                if _our_tx_mined(txhash):
+                    print(f"      {pod} reports nonce-low but our tx {txhash} MINED — success")
+                    NONCE[0] = nonce + 1
+                    return txhash
+                live_latest = _read_nonce("latest")
+                if live_latest > nonce and sent == 0:
+                    raise RuntimeError(
+                        f"FATAL nonce conflict on tx {txhash} (nonce={nonce}): a DIFFERENT tx took "
+                        f"this nonce (latest={live_latest}, our tx not mined). Concurrent signer on "
+                        f"0x9011 — pause it and re-run (idempotent).")
+                # else: this pod is just lagging (our tx is in flight elsewhere) — skip it.
+                print(f"      broadcast {pod}: nonce-low but tx in flight elsewhere — skipping pod")
+                continue
             if any(k in msg for k in BENIGN_SEND):
                 sent += 1  # already in this validator's pool == accepted
             else:
                 print(f"      broadcast {pod}: {str(e)[:120]}")
     if sent == 0:
+        # last check: did it mine anyway (accepted+mined between our sends)?
+        if _our_tx_mined(txhash):
+            NONCE[0] = nonce + 1
+            return txhash
         raise RuntimeError(
             f"tx {txhash} (nonce={nonce}) accepted by 0/{len(RPC_PODS)} validators; not "
             f"waiting on a tx no validator holds. Check nonce / gasPrice vs baseFee.")

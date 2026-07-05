@@ -1,0 +1,6 @@
+{
+  "_comment": "Base-asset prices for MIGRATE_ONESIDED_ORACLE pools. Copy to oracle.json and set LIVE values at execute time. Each one-sided base is an OBJECT: price = base USD (Kraken XBTUSD/AVAXUSD/...); expected_tick = the SECOND operator's INDEPENDENT tick anchor computed from their OWN read of the live mid (DO NOT derive it from `price` here — it is the dual-control cross-check). The executor ABORTS if the price-derived tick strays > ORACLE_TICK_BAND (default 2000 ticks ~= +/-22%) from expected_tick; optional per-base `band_ticks` overrides that width. LUX_USD is the WLUX peg (LETH/LUX = ETHUSD/12.5 => LUX_USD = 12.5). The V4 pool inits at price = <base>USD/LUX_USD (WLUX per base) with treasury WLUX placed as a resting BID ladder BELOW it.",
+  "LUX_USD": 12.5,
+  "LBTC": { "price": 100000.0, "expected_tick": 89876, "band_ticks": 2000 },
+  "LAVAX": { "price": 30.0, "expected_tick": 8755 }
+}

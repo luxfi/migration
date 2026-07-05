@@ -1,0 +1,11 @@
+# build output + generated state
+contracts/out/
+contracts/cache/
+contracts/lib/v4-core
+tools/__pycache__/
+tools/snapshot.json
+tools/plan.json
+tools/state.json
+tools/baseline.json
+tools/oracle.json
+tools/leth_investigation.json

@@ -1,0 +1,19 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+libs = ["lib"]
+solc = "0.8.26"
+evm_version = "cancun"
+via_ir = true
+optimizer = true
+optimizer_runs = 44444444
+bytecode_hash = "none"
+fs_permissions = [{ access = "read", path = "out" }]
+
+# Fast profile for iterating tests (no via_ir). Bytecode from this profile is
+# NOT the deployment artifact — the default profile above is the canonical one.
+[profile.test]
+via_ir = false
+optimizer = true
+optimizer_runs = 200

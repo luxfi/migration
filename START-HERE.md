@@ -38,20 +38,31 @@ An RLP imports **iff** the running node's block-0 hash == the RLP's block-1
 parentHash. Get the genesis wrong and `admin_importChain` fails with `parent
 mismatch` — the "solved 3-4 times" wedge.
 
-**Authoritative source: [`~/work/lux/state/CLAUDE.md`](../state/CLAUDE.md)** —
-section "RLP ↔ Genesis ↔ Upgrade — Canonical Migration Contract" (empirically
-verified 2026-06-02 with `cmd/rlp-vs-genesis` + a real RLP decode).
+**Canonical block-0 hashes — verified directly from the RLP bytes** (the RLP is
+the source of truth; re-run the command in §4 to reproduce any of these):
 
-| Chain | Canonical block-0 hash | Genesis that produces it |
+| Chain | Canonical block-0 hash (the RLP demands this) | Genesis that produces it |
 |---|---|---|
-| Lux C mainnet (96369) | **`0x3f4fa2a0…`** ✓ (RLP-decode verified) | the **2-alloc "Candidate B"** form (`genesis/configs/mainnet/cchain.json`, `skipPostMergeFields:true`, ts `0x672485c2`) |
-| Zoo mainnet (200200) | **`0x7c548af4…`** ✓ | pristine 2-alloc form |
+| Lux C mainnet (96369) | `0x3f4fa2a0b0ce089f52bf0ae9199c75ffdd76ecafc987794050cb0d286f1ec61e` | `genesis/configs/mainnet/cchain.json` — **2-alloc** (warp `0x02..05` + treasury `0x9011…`), `skipPostMergeFields:true`, ts `0x672485c2` |
+| Zoo mainnet (200200) | `0x7c548af47de27560779ccc67dda32a540944accc71dac3343da3b9cd18f14933` | Zoo pristine 2-alloc form |
+| Zoo testnet (200201) | `0x0652fb2fde1460544a5893e5eba5095ff566861cbc87fcb1c73be2b81d6d1979` | Zoo-test pristine 2-alloc form |
 
-> ⚠ **CONTRADICTION — do not use:** `migration/CLAUDE.md` Step 1 says the hash is
-> `0x067668d0` from `genesis.original.json`. That is **unverified and contradicted**
-> by the empirical study, which shows `genesis.original.json` actually produces
-> `0x2f4ae11a` (wrong). Trust `state/CLAUDE.md`'s `0x3f4fa2a0`. Re-verify yourself
-> with the tool below before relying on any hash.
+**The canonical genesis is `~/work/lux/genesis/configs/mainnet/cchain.json`**
+(== `cchain.canonical.json`; both verified 2-alloc / `skipPostMergeFields:true` /
+ts `0x672485c2`). That is the ONLY C-Chain genesis that produces `0x3f4fa2a0…`.
+
+> ⚠ **Stale/wrong genesis files — DO NOT boot mainnet from these:**
+> - `~/work/lux/universe/docker/genesis/mainnet/cchain.json` — has **3 allocs, no
+>   `skipPostMergeFields`** → produces a DIFFERENT hash → RLP import wedges. Stale.
+> - `state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` — 1-alloc →
+>   produces `0x2f4ae11a…` (wrong), NOT `0x3f4fa2a0…`.
+> - The `0x067668d0` in `migration/CLAUDE.md` Step 1 is a **phantom** — it appears in
+>   no RLP decode and no genesis. Ignore it.
+>
+> **Pre-launch gate:** confirm the *deployed* k8s ConfigMap `cChainGenesis`
+> (`universe/k8s/lux-mainnet/luxd-genesis.yaml`) is byte-equal-as-rendered to
+> `genesis/configs/mainnet/cchain.json`, i.e. it boots to `0x3f4fa2a0…`. Verify by
+> booting a node and checking `eth_getBlockByNumber("0x0")`, or with the §4 tool.
 
 ---
 
@@ -77,10 +88,30 @@ Full step-by-step: [`MIGRATION-2026-PRODUCTION.md`](MIGRATION-2026-PRODUCTION.md
 
 ## 4. Tools
 
+**Reproduce the canonical block-0 hash straight from any RLP — no build, no deps**
+(this is how the §2 hashes were verified; `blockN.header[0]` is the parentHash =
+the prior block's hash, so `block1.header[0]` == the genesis hash the RLP demands):
+
+```python
+python3 - <<'PY'
+def hdr(d,o):
+    b=d[o]
+    if   b>=0xf8: ll=b-0xf7; L=int.from_bytes(d[o+1:o+1+ll],'big'); s=o+1+ll
+    elif b>=0xc0: L=b-0xc0; s=o+1
+    elif b>=0xb8: ll=b-0xb7; L=int.from_bytes(d[o+1:o+1+ll],'big'); s=o+1+ll
+    elif b>=0x80: L=b-0x80; s=o+1
+    else:         L=0; s=o
+    return s,L,s+L
+d=open("PATH/TO/chain.rlp","rb").read(8192)
+_,_,b1=hdr(d,0); b1s,_,_=hdr(d,b1); hs,_,_=hdr(d,b1s); ps,pl,_=hdr(d,hs)
+print("block-0 hash = 0x"+d[ps:ps+pl].hex())
+PY
+```
+
 | Tool | Purpose |
 |---|---|
-| `state/cmd/rlp-vs-genesis` | **Verify** a genesis produces the RLP's block-0 hash. `go build` then `rlp-vs-genesis <chain.rlp> <genesis.json> [upgrade.json]`. Exit 0 = match. |
-| `state/cmd/genesis-hash-empirical` | Batch-compute block-0 hash for candidate genesis JSONs. |
+| `state/cmd/rlp-vs-genesis` | Verify a genesis JSON *produces* the RLP block-0 hash. ⚠ **Currently won't build** — its `coreth` imports `luxfi/precompile/pqcrypto`, absent from `luxfi/precompile@v0.19.3` (dep skew; fix the pin before relying on it). Use the python snippet above for the RLP side, and boot-and-`eth_getBlockByNumber("0x0")` for the genesis side, until fixed. |
+| `state/cmd/genesis-hash-empirical` | Batch-compute block-0 hash for candidate genesis JSONs (same dep caveat). |
 | `genesis/cmd/derivekey` | Derive funding/alloc keys `m/44'/9000'/0'/0/<i>` from the mnemonic. |
 | `keys.DeriveHybridIdentity` / `DeriveValidatorFromMnemonic` | Derive validator staking keys (deterministic). |
 

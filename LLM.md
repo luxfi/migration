@@ -4,6 +4,15 @@
 
 The Quasar Edition is what Lux Primary Network + C-Chain MUST be running. All historical archives import cleanly against the original genesis; Quasar Edition rules activate forward-dated via `upgrade.json`, preserving block 0 identity.
 
+> ⚠️ **HASH CORRECTION (2026-07-17) — READ BEFORE ACTING.** Anywhere below that says
+> "mount `genesis.original.json`" or block-0 = `0x067668d0` is **WRONG/inverted**. The
+> RLP bytes demand block-0 = **`0x3f4fa2a0…`** for Lux C (verified directly from the
+> archive), and the canonical genesis is **`~/work/lux/genesis/configs/mainnet/cchain.json`**
+> (2-alloc, `skipPostMergeFields:true`), NOT `genesis.original.json` (1-alloc, produces
+> `0x2f4ae11a…`, wedges import). Per-chain verified block-0 hashes + a build-free way to
+> reproduce them: **[START-HERE.md](START-HERE.md) §2/§4**. Verify EVERY chain's genesis
+> against its RLP before launch — never trust a bare hash written in a doc.
+
 > **Not this doc:** the DEX **V3 → V4 liquidity migration** is a separate, self-contained
 > toolkit in [`v3v4/`](v3v4/RUNBOOK.md) (chainId 96369). It **EXECUTED 2026-07-05** — V4
 > PoolManager `0x2e317c5ce2c3e3aa720a3bb7f366f5959d940d4c`, LiquidityDeployer
@@ -72,22 +81,37 @@ The Etna timestamp is baked into existing canonical genesis JSONs (look for `etn
 |---|---|---|---|
 | P-Chain | No (DB-only, sybil-protected) | n/a | New ML-DSA hybrid validator certs + BTC-style NodeID after Quasar timestamp |
 | X-Chain | No (DB-only) | n/a | UTXO format unchanged; address derivation paths unchanged |
-| C-Chain | `~/work/lux/state/rlp/lux-mainnet/lux-mainnet-96369.rlp` (1.2GB) | `~/work/lux/state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` (hashes to `0x067668d0`) | Cancun + 42 PQ precompiles forward-dated at `1766708400` |
+| C-Chain | `~/work/lux/state/rlp/lux-mainnet/lux-mainnet-96369.rlp` (1.2GB) | `~/work/lux/genesis/configs/mainnet/cchain.json` (2-alloc, `skipPostMergeFields:true`, ts `0x672485c2` → block-0 **`0x3f4fa2a0`**, RLP-verified) | Cancun + 42 PQ precompiles forward-dated at `1766708400` |
 
-### Step 1 — Mount `genesis.original.json` as canonical mainnet C-Chain genesis
+### Step 1 — Mount the canonical 2-alloc `cchain.json` as mainnet C-Chain genesis
 
-The C-Chain RLP archive expects block 0 hash `0x067668d0...` — which is what `genesis.original.json` produces. The current `genesis.json` in the same dir (and the one in `~/work/lux/genesis/configs/mainnet/cchain.json`) added later fields and now hashes to `0x3f4fa2a0...`. That mismatch is why every recent attempt to import the RLP failed.
+> **CORRECTED 2026-07-17 — this step was INVERTED and would have wedged the import.**
+
+The C-Chain RLP archive demands block-0 hash
+**`0x3f4fa2a0b0ce089f52bf0ae9199c75ffdd76ecafc987794050cb0d286f1ec61e`** — verified
+directly from the RLP's block-1 `parentHash` (`block1.header[0]`; reproduce with the
+build-free snippet in [START-HERE.md §4](START-HERE.md)). The **2-alloc
+`~/work/lux/genesis/configs/mainnet/cchain.json`** (warp `0x02..05` + treasury,
+`skipPostMergeFields:true`, ts `0x672485c2`) is the ONLY genesis that produces that
+hash — empirically confirmed in [`state/CLAUDE.md`](../state/CLAUDE.md). Do **NOT**
+mount `genesis.original.json`: it is a 1-alloc form that produces `0x2f4ae11a…` (wrong)
+and wedges the import. The prior `0x067668d0` in this doc was a **phantom** (in no RLP
+decode and no genesis) — ignore it.
 
 ```bash
 # luxd start args for the C-Chain (production)
 luxd \
-  --genesis-file=/etc/luxd/genesis.original.json \
+  --genesis-file=/etc/luxd/cchain.json \
   --chain-config-dir=/etc/luxd/chains \
   --network-id=1 \
   ...
 ```
 
-K8s wiring: mount `~/work/lux/state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` as a ConfigMap at `/etc/luxd/genesis.original.json`, set `--genesis-file` to that path in the StatefulSet command. Update `~/work/lux/universe/k8s/lux-mainnet/luxd-startup.yaml` accordingly.
+K8s wiring: mount the canonical `~/work/lux/genesis/configs/mainnet/cchain.json`
+(2-alloc → block-0 `0x3f4fa2a0`) as a ConfigMap at `/etc/luxd/cchain.json`, set
+`--genesis-file` to that path in the StatefulSet command. Update
+`~/work/lux/universe/k8s/lux-mainnet/luxd-startup.yaml` accordingly. Do NOT mount
+`genesis.original.json` (produces `0x2f4ae11a`, wedges import).
 
 ### Step 2 — Import RLP via `admin_importChain`
 
@@ -238,7 +262,7 @@ in the LuxNetwork CR.
 # Block 0 hash matches RLP expectation
 curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0",false],"id":1}' \
   | jq -r '.result.hash'
-# Expected: 0x067668d0
+# Expected: 0x3f4fa2a0 (RLP-verified; NOT 0x067668d0 — that was a phantom)
 
 # Chain tip > 1M
 curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
@@ -309,8 +333,8 @@ For chains WITHOUT archival history (hanzo-mainnet, pars-mainnet, all testnet/de
 
 ## Verification Checklist (Quasar Edition production readiness)
 
-- [ ] luxd boots with `--genesis-file=<genesis.original.json>` on all 5 mainnet pods
-- [ ] `eth_getBlockByNumber 0x0` returns `0x067668d0` on all pods
+- [ ] luxd boots with `--genesis-file=<genesis/configs/mainnet/cchain.json>` (2-alloc) on all 5 mainnet pods
+- [ ] `eth_getBlockByNumber 0x0` returns `0x3f4fa2a0…` on all pods (NOT `0x067668d0`)
 - [ ] `admin_importChain` succeeds; `eth_blockNumber` > 1M
 - [ ] `upgrade.json` mounted at `<chain-config-dir>/C/upgrade.json` with 42 Quasar precompiles at `blockTimestamp: 1766708400`
 - [ ] Each precompile address responds (`eth_getCode` returns `0x01` sentinel)

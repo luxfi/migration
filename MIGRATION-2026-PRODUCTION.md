@@ -3,6 +3,11 @@
 PRIVATE. Operational migration state + plan. No plaintext secrets here — only
 k8s-secret names + KMS paths. Complete the migration from this doc.
 
+> **New here? Read [START-HERE.md](START-HERE.md) first** — a one-page map of
+> where the RLP lives, the empirically-verified canonical genesis/block-0 hash,
+> the replay flow, and which doc is authoritative for what. (In particular, the
+> `0x067668d0` hash in the design doc is stale — see START-HERE §2.)
+
 kube context: `do-sfo3-lux-k8s`. Zoo cluster: `do-sfo3-zoo-k8s`.
 
 ---
@@ -95,6 +100,14 @@ to final owner in 1 tx later):
   - **devnet** (96367): DAO `0x1FB1F272F98e913c127D9ab3B3aafaFb36EAd85c` · Z `0xA70F3d0cbf45a505E63fc56423561cAd197D55C3`.
 - Ownership → 0x9011 → Safe: all prod infra contracts (lux/zoo/hanzo × 3 nets) + LP +
   bridge on-chain contracts + MPC admin. (MPC admin owner set by the §2 rebuild directly.)
+  - **Mainnet DEX ownership → DAO Safe is DONE-STAGED + FORK-PROVEN — see
+    `OWNERSHIP-RUNBOOK.md`.** Two paths: **A** StateUpgrade re-owns the 23 lost/unknown-key
+    contracts (0xce15 lost + 0xbe7A89 + 0x086F4aA1 — the V3/V2 factories + full token set)
+    to the DAO Safe (fork-proven 109/109, `program/ownership_fork_e2e.sh`); **B** direct
+    transfers the 74 V3 LP NFTs (`program/lp_transfer.sh`) + 7 non-zero 0x9011 ERC-20
+    balances incl. ~7.6B LZOO (`program/path_b_erc20.sh`). Manifest generator:
+    `program/gen_ownership_manifest.py` (deterministic, 23 accounts). 0x9011 owns 0 DEX
+    contracts. WLUX + all V3/V2 periphery are immutable (no owner) — untouched.
 - **Treasury:** 0x9011 mainnet = **~1,994,739,896,346 LUX** (~1.99T). SWEEP routing:
   DAO funds → DAO Safe; team P/X + 0x9011 residual → Z Safe. GATED — audit classifies, then
   per-step user go (real money, irreversible).

@@ -54,15 +54,18 @@ ts `0x672485c2`). That is the ONLY C-Chain genesis that produces `0x3f4fa2a0…`
 > ⚠ **Stale/wrong genesis files — DO NOT boot mainnet from these:**
 > - `~/work/lux/universe/docker/genesis/mainnet/cchain.json` — has **3 allocs, no
 >   `skipPostMergeFields`** → produces a DIFFERENT hash → RLP import wedges. Stale.
-> - `state/pebbledb/configs/lux-mainnet-96369/genesis.original.json` — 1-alloc →
->   produces `0x2f4ae11a…` (wrong), NOT `0x3f4fa2a0…`.
+> - `genesis.original.json` (was in `state/pebbledb/configs/lux-*`) — **DELETED 2026-07-17.**
+>   It was a 1-alloc form → `0x2f4ae11a…` (wrong), NOT `0x3f4fa2a0…`. The canonical
+>   `genesis/configs/mainnet/cchain.json` is the only C-Chain genesis you need.
 > - The `0x067668d0` in `migration/CLAUDE.md` Step 1 is a **phantom** — it appears in
 >   no RLP decode and no genesis. Ignore it.
 >
-> **Pre-launch gate:** confirm the *deployed* k8s ConfigMap `cChainGenesis`
-> (`universe/k8s/lux-mainnet/luxd-genesis.yaml`) is byte-equal-as-rendered to
-> `genesis/configs/mainnet/cchain.json`, i.e. it boots to `0x3f4fa2a0…`. Verify by
-> booting a node and checking `eth_getBlockByNumber("0x0")`, or with the §4 tool.
+> **Pre-launch gate — source side CLOSED (2026-07-17):** `genesis/configs/mainnet/cchain.json`
+> is confirmed **Candidate B** (2-alloc, ts `0x672485c2`, `skipPostMergeFields:true`) →
+> boots to `0x3f4fa2a0…` (also empirically MATCH-verified against the RLP on 2026-06-02,
+> see `state/CLAUDE.md`). **Remaining gate:** confirm the *deployed* k8s ConfigMap
+> `cChainGenesis` (`universe/k8s/lux-mainnet/luxd-genesis.yaml`) renders byte-equal to that
+> source file. Verify by booting a node and checking `eth_getBlockByNumber("0x0") == 0x3f4fa2a0…`.
 
 ---
 
@@ -110,7 +113,7 @@ PY
 
 | Tool | Purpose |
 |---|---|
-| `state/cmd/rlp-vs-genesis` | Verify a genesis JSON *produces* the RLP block-0 hash. ⚠ **Currently won't build** — its `coreth` imports `luxfi/precompile/pqcrypto`, absent from `luxfi/precompile@v0.19.3` (dep skew; fix the pin before relying on it). Use the python snippet above for the RLP side, and boot-and-`eth_getBlockByNumber("0x0")` for the genesis side, until fixed. |
+| `state/cmd/rlp-vs-genesis` | Verify a genesis JSON *produces* the RLP block-0 hash. ⚠ **Still won't build from cold** — the `pqcrypto` break is fixed (coreth `3687e4e25`: `pqcrypto`→`mlkem`, which wraps `luxfi/crypto/mlkem`), but coreth carries further legacy dep-skew (`warp.UnsignedMessage`, and `geth v1.16.99` in its own go.mod) that needs a separate coreth modernization. **You don't need it for launch:** the Lux-C (`0x3f4fa2a0`) and Zoo (`0x7c548af4`) genesis↔RLP matches are already empirically MATCH-verified (2026-06-02, `state/CLAUDE.md`). For a fresh check use the python snippet above (RLP side) + boot-luxd `eth_getBlockByNumber("0x0")` (genesis side, production geth v1.20.1). |
 | `state/cmd/genesis-hash-empirical` | Batch-compute block-0 hash for candidate genesis JSONs (same dep caveat). |
 | `genesis/cmd/derivekey` | Derive funding/alloc keys `m/44'/9000'/0'/0/<i>` from the mnemonic. |
 | `keys.DeriveHybridIdentity` / `DeriveValidatorFromMnemonic` | Derive validator staking keys (deterministic). |

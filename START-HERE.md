@@ -113,8 +113,8 @@ PY
 
 | Tool | Purpose |
 |---|---|
-| `state/cmd/rlp-vs-genesis` | Verify a genesis JSON *produces* the RLP block-0 hash. ⚠ **Still won't build from cold** — the `pqcrypto` break is fixed (coreth `3687e4e25`: `pqcrypto`→`mlkem`, which wraps `luxfi/crypto/mlkem`), but coreth carries further legacy dep-skew (`warp.UnsignedMessage`, and `geth v1.16.99` in its own go.mod) that needs a separate coreth modernization. **You don't need it for launch:** the Lux-C (`0x3f4fa2a0`) and Zoo (`0x7c548af4`) genesis↔RLP matches are already empirically MATCH-verified (2026-06-02, `state/CLAUDE.md`). For a fresh check use the python snippet above (RLP side) + boot-luxd `eth_getBlockByNumber("0x0")` (genesis side, production geth v1.20.1). |
-| `state/cmd/genesis-hash-empirical` | Batch-compute block-0 hash for candidate genesis JSONs (same dep caveat). |
+| **`evm/cmd/ghash`** | **Canonical genesis→block-0 hash verifier** (production `evm` + geth v1.20.1). `cd ~/work/lux/evm && go run ./cmd/ghash <genesis.json> [more.json …]`. Prints `block-0 = 0x…` + alloc/ts/skipPMF. This is how the launch gate was closed: canonical `cchain.json` **and** the deployed k8s `cChainGenesis` both → `0x3f4fa2a0…`. Replaces the old coreth `state/cmd/rlp-vs-genesis` + `genesis-hash-empirical` (deleted — they no longer built against the current stack). |
+| python snippet above | The RLP *demand* side (block-0 hash the archive requires). `ghash` + this snippet together = the full RLP↔genesis check. |
 | `genesis/cmd/derivekey` | Derive funding/alloc keys `m/44'/9000'/0'/0/<i>` from the mnemonic. |
 | `keys.DeriveHybridIdentity` / `DeriveValidatorFromMnemonic` | Derive validator staking keys (deterministic). |
 

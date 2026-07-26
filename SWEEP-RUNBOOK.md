@@ -21,7 +21,7 @@ phases remain, all money/ownership, all gated:
 |---|---|---|
 | ~~deploy~~ | 2 Safes | **DONE on mainnet** (proven re-runnable on local 1337) |
 | **sweep** | `0x9011` split + EOA sweeps → Safes | `EXECUTE=yes` + `DAO_ALLOC` |
-| **ownership** | on-chain Ownable/admin → DAO Safe | **BLOCKED** (0xce15 key unlocated; emits calldata, no-op) |
+| **ownership** | full DEX → DAO Safe | **SOLVED — see `OWNERSHIP-RUNBOOK.md`**: Path A StateUpgrade re-owns the 23 lost/unknown-key contracts (0xce15 + 0xbe7A89 + 0x086F4aA1), fork-proven 109/109; Path B direct-transfers the 74 LP NFTs + 7 ERC-20 balances from 0x9011 |
 | **upgrade** | rotate Safe owner `0x9011` → fresh owner | `EXECUTE=yes` + final owners — the security close-out |
 
 ## 2. The split (tokenomics-derived)
@@ -143,14 +143,14 @@ echo "0x9011=$(cast to-unit $(cast balance 0x9011E888251AB053B7bD1cdB598Db4f9DEd
 ```
 Stop keep-warm (Ctrl-C in terminal 2) after the sweep verifies.
 
-### 6.3 Ownership (no-op today — emits calldata)
+### 6.3 Ownership → DAO Safe — SOLVED (see `OWNERSHIP-RUNBOOK.md`)
 
-```bash
-PHASE=ownership bash prepare_program.sh $RPC
-```
-The LIVE AMM handles are owned by `0xce15…` (key unlocated) → BLOCKED. The phase prints the
-`setOwner`/`setFeeToSetter`/`transferOwnership` calldata to apply once that key is located or
-the contracts are redeployed under `0x9011`. No state change.
+Superseded the old "emits-calldata/BLOCKED" note. The lost/unknown-key contracts (0xce15 +
+0xbe7A89 + 0x086F4aA1) can't be `transferOwnership`'d, so they move via a **StateUpgrade**
+(Path A) that rewrites the owner slot to the DAO Safe — fork-proven 109/109 in
+`program/ownership_fork_e2e.sh`. Everything 0x9011 can sign for (74 LP NFTs + 7 ERC-20
+balances) moves by **direct tx** (Path B: `program/lp_transfer.sh` + `program/path_b_erc20.sh`).
+Full ordered plan, roll mechanics, and per-step verify live in `OWNERSHIP-RUNBOOK.md`.
 
 ### 6.4 Upgrade — the security close-out (LAST; after this `0x9011` is locked out)
 

@@ -1,0 +1,2 @@
+@openzeppelin/contracts/=/Users/z/work/lux/standard/lib/openzeppelin-contracts/contracts/
+forge-std/=/Users/z/work/lux/standard/lib/forge-std/src/

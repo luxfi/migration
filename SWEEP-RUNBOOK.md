@@ -101,7 +101,7 @@ a SINGLE caught-up node for BOTH nonce reads and broadcast. Pick the max-head no
 ```bash
 for n in 0 1 2 3 4; do ip=$(kubectl --context do-sfo3-lux-k8s -n lux-mainnet \
   get svc luxd-$n -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-  echo "luxd-$n $ip head=$(cast block-number --rpc-url http://$ip:9630/ext/bc/C/rpc)"; done
+  echo "luxd-$n $ip head=$(cast block-number --rpc-url http://$ip:9630/v1/bc/C/rpc)"; done
 ```
 
 Port-forward the chosen node (most direct; the script's live-execute warning still fires —
@@ -109,7 +109,7 @@ fork detection probes `anvil_nodeInfo`, so a real luxd over 127.0.0.1 is correct
 
 ```bash
 kubectl --context do-sfo3-lux-k8s -n lux-mainnet port-forward pod/luxd-4 9630:9630 &
-export RPC=http://127.0.0.1:9630/ext/bc/C/rpc
+export RPC=http://127.0.0.1:9630/v1/bc/C/rpc
 cast chain-id --rpc-url $RPC   # must print 96369
 ```
 If the port-forward drops mid-run, restart it and re-run the current phase — every phase is

@@ -21,9 +21,9 @@ BEST=""; BESTH=0
 for n in 0 1 2 3 4; do
   ip=$(kubectl --context do-sfo3-lux-k8s -n lux-mainnet get svc "luxd-$n" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
   [ -z "$ip" ] && continue
-  h=$(cast block-number --rpc-url "http://$ip:9630/ext/bc/C/rpc" 2>/dev/null) || continue
+  h=$(cast block-number --rpc-url "http://$ip:9630/v1/bc/C/rpc" 2>/dev/null) || continue
   echo "  luxd-$n  $ip  head=$h"
-  [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/ext/bc/C/rpc"; BESTN=$n; }
+  [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/v1/bc/C/rpc"; BESTN=$n; }
 done
 [ -n "$BEST" ] || { echo "ABORT: no reachable luxd node"; exit 1; }
 echo "  -> fork base: luxd-$BESTN head=$BESTH  $BEST"

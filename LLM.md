@@ -118,7 +118,7 @@ K8s wiring: mount the canonical `~/work/lux/genesis/configs/mainnet/cchain.json`
 Existing `~/work/lux/state/rlp/lux-mainnet/lux-mainnet-96369.rlp` carries ~1M blocks of C-Chain history. Once block 0 matches, import:
 
 ```bash
-curl -s --max-time 7200 http://luxd-0:9650/ext/bc/C/rpc \
+curl -s --max-time 7200 http://luxd-0:9650/v1/bc/C/rpc \
   -d '{"jsonrpc":"2.0","method":"admin_importChain","params":["/data/lux-mainnet-96369.rlp"],"id":1}'
 ```
 
@@ -209,7 +209,7 @@ NS=lux-mainnet
 SS=luxd
 
 # 1. Snapshot validator IDs (for re-anchor verification at step 4 if needed)
-kubectl -n "$NS" exec sts/${SS}-0 -- curl -s http://localhost:9650/ext/bc/P \
+kubectl -n "$NS" exec sts/${SS}-0 -- curl -s http://localhost:9650/v1/bc/P \
   -d '{"jsonrpc":"2.0","method":"platform.getCurrentValidators","params":{},"id":1}' \
   > /tmp/validators-pre-v1.28.15.json
 
@@ -236,7 +236,7 @@ kubectl -n "$NS" logs sts/${SS}-0 --tail=50 | grep -E "quorum|consensus|started"
 # 6. Health probe (must succeed within 2min of restart)
 for i in 0 1 2 3 4; do
   echo "=== luxd-$i ==="
-  kubectl -n "$NS" exec sts/${SS}-$i -- curl -s http://localhost:9650/ext/health \
+  kubectl -n "$NS" exec sts/${SS}-$i -- curl -s http://localhost:9650/v1/health \
     | jq '.healthy'
 done
 ```
@@ -260,19 +260,19 @@ in the LuxNetwork CR.
 
 ```bash
 # Block 0 hash matches RLP expectation
-curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0",false],"id":1}' \
+curl http://luxd-0:9650/v1/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0",false],"id":1}' \
   | jq -r '.result.hash'
 # Expected: 0x3f4fa2a0 (RLP-verified; NOT 0x067668d0 — that was a phantom)
 
 # Chain tip > 1M
-curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+curl http://luxd-0:9650/v1/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 
 # Precompile active (e.g. mldsaVerify at slot 0x0...0100 — verify actual slot from genesis builder)
-curl http://luxd-0:9650/ext/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0x0000000000000000000000000000000000000100","latest"],"id":1}'
+curl http://luxd-0:9650/v1/bc/C/rpc -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0x0000000000000000000000000000000000000100","latest"],"id":1}'
 # Expected: 0x01 (precompile sentinel)
 
 # Validator set has hybrid pubkeys
-curl http://luxd-0:9650/ext/bc/P -d '{"jsonrpc":"2.0","method":"platform.getCurrentValidators","params":{},"id":1}' \
+curl http://luxd-0:9650/v1/bc/P -d '{"jsonrpc":"2.0","method":"platform.getCurrentValidators","params":{},"id":1}' \
   | jq '.result.validators[0].pq_pubkey'
 # Expected: ML-DSA-65 pubkey hex
 ```

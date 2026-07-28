@@ -15,7 +15,7 @@ Path A is fork-proven (109/109). Path B is staged + validated read-only. kube co
 
 ```bash
 kubectl --context do-sfo3-lux-k8s -n lux-mainnet port-forward --address 127.0.0.1 pod/luxd-4 19630:9630 &
-export RPC=http://127.0.0.1:19630/ext/bc/C/rpc
+export RPC=http://127.0.0.1:19630/v1/bc/C/rpc
 cast chain-id --rpc-url $RPC   # must print 96369
 ```
 If 127.0.0.1:9630 is already taken by a stale listener, use another local port (e.g. 19630).

@@ -18,7 +18,7 @@ set -euo pipefail
 
 CAST=/Users/z/.foundry/bin/cast
 FORK="http://127.0.0.1:8545"          # the ONLY endpoint this script will ever send to
-UPSTREAM="http://127.0.0.1:19630/ext/bc/C/rpc"
+UPSTREAM="http://127.0.0.1:19630/v1/bc/C/rpc"
 FORK_BLOCK=1082950
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JSON="$HERE/v3-to-v4-withdraw.json"

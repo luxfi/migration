@@ -20,8 +20,8 @@ BEST=""; BESTH=0
 for n in 0 1 2 3 4; do
   ip=$(kubectl --context do-sfo3-lux-k8s -n lux-mainnet get svc "luxd-$n" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
   [ -z "$ip" ] && continue
-  h=$(cast block-number --rpc-url "http://$ip:9630/ext/bc/C/rpc" 2>/dev/null) || continue
-  [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/ext/bc/C/rpc"; }
+  h=$(cast block-number --rpc-url "http://$ip:9630/v1/bc/C/rpc" 2>/dev/null) || continue
+  [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/v1/bc/C/rpc"; }
 done
 [ -n "$BEST" ] || { echo "ABORT: no reachable luxd node"; exit 1; }
 EOA_ADDRS=(0xEAbCC110fAcBfebabC66Ad6f9E7B67288e720B59 0x8d5081153aE1cfb41f5c932fe0b6Beb7E159cF84 0xf7f52257a6143cE6BbD12A98eF2B0a3d0C648079 0xCA92ad0C91bd8DE640B9dAFfEB338ac908725142 0xB5B325df519eB58B7223d85aaeac8b56aB05f3d6 0xf785FA547ae9CcF3D3ca5362762A347a4c41051A 0xf4b5be7a6deA583dA4CddCDa4D9B3afd51684b6e 0x202335dd1c21C9B90277F8BcA78Db98db0bBc293)

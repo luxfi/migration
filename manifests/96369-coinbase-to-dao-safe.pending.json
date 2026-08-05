@@ -1,0 +1,22 @@
+{
+  "_what": "Point the C-Chain coinbase at the DAO treasury Safe. Append this ONE entry to precompileUpgrades in luxfi/universe deploy/lux-mainnet/luxd.yaml (configMaps[0].data['cchain-upgrade.json']), stamp blockTimestamp off the CHAIN clock (+45m), push to GitHub, let the git.hanzo.ai mirror pull, then sync hanzo-cd.",
+  "_status": "PENDING — not applied. Blocked on mainnet C-Chain being down (v1.36.56 roll, P-Chain height 0).",
+  "_why_no_solidity": "Fees arrive at the coinbase as a direct AddBalance state credit — no code executes, so the destination does not need to be a contract. Sending 100% to the Safe lets the DAO decide burn vs distribution on-chain, with arbitrary rules, changeable any time. No splitter contract to deploy or maintain.",
+  "_why_no_node_change": "feeSplitTimestamp (the protocol 50/50) stays OFF deliberately. With IsFeeSplit false, creditTxFee credits the FULL fee to the coinbase — which is exactly the input the DAO wants. Turning the protocol split on would only halve what reaches the Safe and hard-code a ratio that then needs a fork to change.",
+  "_governable_after": "adminAddresses = the Safe, so the DAO can re-point the reward address later by an on-chain RewardManager transaction — no fork, no redeploy, no config edit.",
+  "_consensus_note": "dummy.verifyCoinbase rejects a block whose header coinbase disagrees with the configured one, so ALL 5 validators must carry this before blockTimestamp or they fork. Use program/state_upgrade.sh's mount-wait + one-at-a-time roll.",
+  "_verify_after": [
+    "cast balance 0xF0D19cCCB8e33663e9bDEe6e40474F1E3fD1f2BD  -> climbing",
+    "cast balance 0x0100000000000000000000000000000000000000  -> FLAT (blackhole stops growing)",
+    "./fleet_verify.sh -> CONVERGED 5/5, one state root"
+  ],
+  "entry": {
+    "rewardManagerConfig": {
+      "blockTimestamp": "<STAMP FROM CHAIN CLOCK — do not hand-write; an empty read becomes 0 = 1970 = fires next block>",
+      "adminAddresses": ["0xF0D19cCCB8e33663e9bDEe6e40474F1E3fD1f2BD"],
+      "initialRewardConfig": {
+        "rewardAddress": "0xF0D19cCCB8e33663e9bDEe6e40474F1E3fD1f2BD"
+      }
+    }
+  }
+}

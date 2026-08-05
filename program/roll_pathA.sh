@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# ⛔ SUPERSEDED 2026-08-05 — kept only as a record of what was run in July.
+#
+# Do not use this. Two things in it are now known to be wrong:
+#
+#  1. It rolls with `kubectl delete pod`. DigitalOcean's kubelet TTL-caches
+#     ConfigMaps, so a recreated pod mounts the STALE copy and silently runs the
+#     old config — the exact failure it is trying to avoid. Restart the luxd
+#     child in place instead (program/fleet.sh restart_in_place).
+#
+#  2. It assumes the ConfigMap is writable. It is not: hanzo-cd owns it and
+#     reverts hand-patches. The source of truth is the Helm values file
+#     luxfi/universe deploy/<fleet>/luxd.yaml.
+#
+# Use instead:  ./state_upgrade.sh   ./fleet_verify.sh   ./fleet_heal.sh
 # Path-A roll: restart all 5 mainnet validators so each copies the (now-synced) CM
 # cchain-upgrade.json — carrying the ownership StateUpgrade (23 accounts) — into the file
 # luxd actually reads (/data/configs/chains/C/upgrade.json). Per-pod verify that the COPY

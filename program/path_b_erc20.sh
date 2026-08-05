@@ -15,16 +15,27 @@ export FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 CTX=do-sfo3-lux-k8s
 SECRET_NS="${SECRET_NS:-lux-mainnet}"
 OWNER=0x9011E888251AB053B7bD1cdB598Db4f9DEd94714
-DAO="${DAO:-0x51284dC2133e8d3a8e213DCa6a6FA768cfDfcce2}"
+DAO="${DAO:-0xF0D19cCCB8e33663e9bDEe6e40474F1E3fD1f2BD}"
 : "${RPC:?set RPC to a pinned caught-up mainnet node}"
 low(){ echo "$1" | tr 'A-Z' 'a-z'; }
 
 cid=$(cast chain-id --rpc-url "$RPC" 2>/dev/null)
 [ "$cid" = "96369" ] || { echo "REFUSE: chainId=$cid != 96369 (wrong net / not pinned)"; exit 1; }
-# DAO Safe must be a deployed 1/1 0x9011-owned Safe (never sweep to a phantom)
+# The DAO Safe must be REAL and OWNED BY A KEY WE HOLD — never sweep to a phantom.
+#
+# This used to hard-code 0x9011 as the required owner. That was right when the Safe
+# was 1/1 0x9011, and wrong from 2026-08-05: the RLP restore to block 1,082,780
+# un-deployed the old Safe (0x51284dC2, 0 bytes) and the rebuilt one is owned by the
+# CLEAN deployer 0x591eE882 precisely BECAUSE 0x9011's key is compromised. Requiring
+# the leaked key as owner would have been the bug, not the safeguard.
+#
+# The invariant that actually matters is "a key we control owns the destination", so
+# assert that against SAFE_OWNER (default: the clean deployer) instead of a literal.
+SAFE_OWNER="${SAFE_OWNER:-0x591eE88261B43D79692B22cBfde291f7d36853AB}"
 [ "$(cast codesize $DAO --rpc-url $RPC)" -gt 0 ] || { echo "REFUSE: DAO Safe has no code"; exit 1; }
-cast call $DAO 'getOwners()(address[])' --rpc-url $RPC 2>/dev/null | grep -qi "9011E888251AB053B7bD1cdB598Db4f9DEd94714" \
-  || { echo "REFUSE: DAO Safe owners do not include 0x9011"; exit 1; }
+cast call $DAO 'getOwners()(address[])' --rpc-url $RPC 2>/dev/null | grep -qi "${SAFE_OWNER#0x}" \
+  || { echo "REFUSE: DAO Safe $DAO owners do not include SAFE_OWNER=$SAFE_OWNER"; exit 1; }
+echo "[erc20] destination Safe $DAO verified owned by $SAFE_OWNER" 
 
 # The DEX tokens 0x9011 can hold (canonical bridge set + LAVAX). Only non-zero are swept.
 TOKENS="LUSD:0x848Cff46eb323f323b6Bbe1Df274E40793d7f2c2 \

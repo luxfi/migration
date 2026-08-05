@@ -8,15 +8,15 @@ set -uo pipefail
 CTX=do-sfo3-lux-k8s
 NINE=0x9011E888251AB053B7bD1cdB598Db4f9DEd94714
 PM=0x7a4C48B9dae0b7c396569b34042fcA604150Ee28
-DAO=0x51284dC2133e8d3a8e213DCa6a6FA768cfDfcce2
+DAO=0xF0D19cCCB8e33663e9bDEe6e40474F1E3fD1f2BD
 PORT="${PORT:-19710}"
 RPC=http://127.0.0.1:$PORT/v1/bc/C/rpc
 # The full, known set of 0x9011's V3 LP position tokenIds (captured from the first clean plan).
 IDS="7 8 9 10 11 18 19 20 21 23 24 25 26 27 28 29 30 32 36 37 41 42 43 44 45 46 47 48 49 50 61 62 63 64 65 66 67 68 72 73 74 75 76 78 80 81 82 84 85 86 93 94 95 96 97 98 99 100 101 102 130 131 133 134 135 136 137 138 139 140 141 142 143 150"
 lc(){ echo "$1" | tr 'A-Z' 'a-z'; }
 
-pf_start(){ pkill -f "port-forward.*lux-mainnet.*luxd-4 $PORT" 2>/dev/null; sleep 1
-  kubectl --context $CTX -n lux-mainnet port-forward pod/luxd-4 $PORT:9630 >/tmp/pf-lp2.log 2>&1 &
+pf_start(){ pkill -f "port-forward.*lux-mainnet.*luxd-0 $PORT" 2>/dev/null; sleep 1
+  kubectl --context $CTX -n lux-mainnet port-forward pod/luxd-0 $PORT:9630 >/tmp/pf-lp2.log 2>&1 &
   for i in $(seq 1 20); do sleep 1; cast chain-id --rpc-url $RPC 2>/dev/null | grep -q 96369 && return 0; done; return 1; }
 pf_ensure(){ cast chain-id --rpc-url $RPC 2>/dev/null | grep -q 96369 || pf_start; }
 
@@ -54,6 +54,6 @@ pf_ensure
 rem=$(cast call $PM 'balanceOf(address)(uint256)' $NINE --rpc-url $RPC 2>/dev/null | sed 's/ .*//')
 dao=$(cast call $PM 'balanceOf(address)(uint256)' $DAO --rpc-url $RPC 2>/dev/null | sed 's/ .*//')
 echo "[lp2] === DONE moved=$moved skip=$skip fail=$fail ; 0x9011 now holds $rem ; DAO Safe holds $dao ==="
-pkill -f "port-forward.*lux-mainnet.*luxd-4 $PORT" 2>/dev/null
+pkill -f "port-forward.*lux-mainnet.*luxd-0 $PORT" 2>/dev/null
 MK=
 [ "$rem" = "0" ]

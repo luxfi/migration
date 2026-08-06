@@ -15,6 +15,9 @@
 : "${STS:=luxd}"
 : "${N:=5}"
 : "${CHAIN:=C}"
+# Container name inside the pod. lux fleets call it "luxd"; hanzo calls it
+# "hanzod". Hardcoding it made every exec silently fail on the hanzo fleet.
+: "${CONTAINER:=luxd}"
 : "${HTTP_PORT:=9630}"
 export FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 
@@ -74,7 +77,7 @@ pod_read() { # <pod> <port> <what: tip|root|ts> [blockNumber for root]
 # startup.sh re-copies the mount into the PVC on every boot of the luxd child,
 # so killing just that process picks up the new config with no kubelet involved.
 restart_in_place() { # <pod>
-  k exec "$1" -c luxd -- sh -c \
+  k exec "$1" -c "$CONTAINER" -- sh -c \
     'for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = "luxd" ] && kill ${p#/proc/}; done' \
     >/dev/null 2>&1 || true
 }
@@ -86,7 +89,7 @@ restart_in_place() { # <pod>
 # --skip-bootstrap=false, writes a state-sync config, and self-consumes once the
 # frontier is reached.
 heal_stranded() { # <pod>
-  k exec "$1" -c luxd -- sh -c 'touch /data/db/.allow-bootstrap' >/dev/null 2>&1 \
+  k exec "$1" -c "$CONTAINER" -- sh -c 'touch /data/db/.allow-bootstrap' >/dev/null 2>&1 \
     || die "could not write .allow-bootstrap on $1"
   restart_in_place "$1"
 }

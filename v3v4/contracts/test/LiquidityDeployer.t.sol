@@ -292,4 +292,56 @@ contract LiquidityDeployerTest is Test {
         assertEq(tokenA.balanceOf(address(dep)), 0);
         assertEq(tokenB.balanceOf(address(dep)), 0);
     }
+
+    // ---- defensive: a bool-less ERC20 returning FALSE is caught, not ignored ----
+    function test_RescueRevertsOnFalseReturningToken() public {
+        FalseERC20 f = new FalseERC20();
+        vm.prank(owner);
+        vm.expectRevert(LiquidityDeployer.TransferFromFailed.selector);
+        dep.rescue(address(f), recipient, 1);
+    }
+
+    function test_AddRevertsWhenFunderTokenReturnsFalse() public {
+        FalseERC20 f = new FalseERC20();
+        MockERC20 g = new MockERC20("G", "G", 18);
+        (Currency c0, Currency c1) = address(f) < address(g)
+            ? (Currency.wrap(address(f)), Currency.wrap(address(g)))
+            : (Currency.wrap(address(g)), Currency.wrap(address(f)));
+        PoolKey memory k =
+            PoolKey({currency0: c0, currency1: c1, fee: FEE, tickSpacing: SPACING, hooks: IHooks(address(0))});
+        manager.initialize(k, TickMath.getSqrtPriceAtTick(0));
+        f.mint(funder, 1e30);
+        g.mint(funder, 1e30);
+        vm.prank(funder);
+        g.approve(address(dep), type(uint256).max);
+        (int24 lo, int24 hi) = _fullRange();
+        vm.prank(owner);
+        vm.expectRevert(LiquidityDeployer.TransferFromFailed.selector);
+        dep.add(LiquidityDeployer.AddParams(k, lo, hi, 1e15, bytes32(0), funder, type(uint128).max, type(uint128).max));
+    }
+}
+
+/// @dev A bool-less-style ERC20 that reports FALSE on transfer/transferFrom, to
+///      prove LiquidityDeployer treats a false return as failure, not success.
+contract FalseERC20 {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    uint8 public constant decimals = 18;
+
+    function mint(address to, uint256 a) external {
+        balanceOf[to] += a;
+    }
+
+    function approve(address s, uint256 a) external returns (bool) {
+        allowance[msg.sender][s] = a;
+        return true;
+    }
+
+    function transfer(address, uint256) external pure returns (bool) {
+        return false;
+    }
+
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        return false;
+    }
 }

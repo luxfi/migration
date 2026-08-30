@@ -46,10 +46,14 @@ bc() { jq -r '.bytecode.object' "$OUT/$1.sol/$1.json"; }
 create() { local addr; addr=$(cast send --rpc-url "$RPC" --private-key "$KEY" --json --create "$(bc "$1")" | jq -r '.contractAddress'); [ -n "$addr" ] && [ "$addr" != "null" ] || { echo "FAIL deploy $1" >&2; exit 1; }; echo "$addr"; }
 
 # ---- shared Safe infra (once) ----
-SINGLETON=$(create SafeL2);                      echo "SafeL2 singleton      : $SINGLETON"
-FACTORY=$(create SafeProxyFactory);              echo "SafeProxyFactory      : $FACTORY"
-HANDLER=$(create CompatibilityFallbackHandler);  echo "FallbackHandler       : $HANDLER"
-MULTISEND=$(create MultiSendCallOnly);           echo "MultiSendCallOnly     : $MULTISEND"
+# Infra is deployed once and then reused. Supplying the four addresses makes a
+# re-run resume instead of paying for a second copy — the proxies are the part
+# that carries the salt, and they are cheap. A run that dies after the infra and
+# before the proxies used to strand four contracts and start over.
+SINGLETON="${SINGLETON:-$(create SafeL2)}";                     echo "SafeL2 singleton      : $SINGLETON"
+FACTORY="${FACTORY:-$(create SafeProxyFactory)}";               echo "SafeProxyFactory      : $FACTORY"
+HANDLER="${HANDLER:-$(create CompatibilityFallbackHandler)}";   echo "FallbackHandler       : $HANDLER"
+MULTISEND="${MULTISEND:-$(create MultiSendCallOnly)}";          echo "MultiSendCallOnly     : $MULTISEND"
 
 SETUP=$(cast calldata "setup(address[],uint256,address,bytes,address,address,uint256,address)" \
   "[$OWNER]" "$THRESHOLD" "$ZERO" "0x" "$HANDLER" "$ZERO" 0 "$ZERO")

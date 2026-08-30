@@ -160,7 +160,7 @@ Do NOT reuse this mnemonic for the final Safe owners; generate FRESH keys in KMS
 
 ## 7. Key reference
 
-- RPCs: mainnet `https://api.lux.network/v1/bc/C/rpc` (port 9630); testnet
+- RPCs: mainnet `https://api.lux.network/v1/chain/C/rpc` (port 9630); testnet
   `https://api.lux-test.network/...` (9630); devnet (9650).
 - Addresses: treasury `0x9011E888251AB053B7bD1cdB598Db4f9DEd94714`; genesis deployer
   `0xf785FA547ae9CcF3D3ca5362762A347a4c41051A`; MPC initiator `0xC054…`; predicted Safe

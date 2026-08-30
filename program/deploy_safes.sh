@@ -22,7 +22,19 @@ STD_DIR="${STD_DIR:-/Users/z/work/lux/standard}"
 OUT="${OUT:-$STD_DIR/out}"; REC="${REC:-$STD_DIR/deployments}"
 ZERO=0x0000000000000000000000000000000000000000
 
-KEY=$(kubectl --context do-sfo3-lux-k8s get secret lux-deployer -n "$SECRET_NS" -o jsonpath='{.data.LUX_PRIVATE_KEY}' | base64 -d)
+# The signer, from whichever store is actually reachable. `LUX_PRIVATE_KEY` in the
+# environment wins, so this runs against a local devnet, from CI, or from a KMS
+# read without editing the script. The kubectl read stays as the last resort; it
+# is no longer the only path, because a cluster outage used to take the whole
+# deployment with it.
+if [ -n "${LUX_PRIVATE_KEY:-}" ]; then
+  KEY="$LUX_PRIVATE_KEY"
+elif [ -n "${KUBE_CONTEXT:-}" ] || kubectl --context "${KUBE_CONTEXT:-do-sfo3-lux-k8s}" version >/dev/null 2>&1; then
+  KEY=$(kubectl --context "${KUBE_CONTEXT:-do-sfo3-lux-k8s}" get secret lux-deployer -n "$SECRET_NS" -o jsonpath='{.data.LUX_PRIVATE_KEY}' | base64 -d)
+else
+  echo "no signer: set LUX_PRIVATE_KEY, or make a cluster holding secret/lux-deployer reachable" >&2
+  exit 2
+fi
 case "$KEY" in 0x*) ;; *) KEY="0x$KEY";; esac
 CHAINID=$(cast chain-id --rpc-url "$RPC")
 FROM=$(cast wallet address --private-key "$KEY")

@@ -46,13 +46,13 @@ pf_open() { # <pod> <localport>
   k port-forward "pod/$1" "$2:$HTTP_PORT" >/dev/null 2>&1 &
   _PF_PID=$!
   local i; for i in $(seq 1 15); do
-    cast chain-id --rpc-url "http://127.0.0.1:$2/v1/bc/$CHAIN/rpc" >/dev/null 2>&1 && return 0
+    cast chain-id --rpc-url "http://127.0.0.1:$2/v1/chain/$CHAIN/rpc" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 1
 }
 pf_close() { [ -n "$_PF_PID" ] && kill "$_PF_PID" 2>/dev/null; _PF_PID=""; }
-rpc()      { echo "http://127.0.0.1:${1}/v1/bc/$CHAIN/rpc"; }
+rpc()      { echo "http://127.0.0.1:${1}/v1/chain/$CHAIN/rpc"; }
 
 # Read one field from one pod. Echoes empty on failure — callers must
 # distinguish "empty" (probe failed) from a real value, never treat empty as 0.

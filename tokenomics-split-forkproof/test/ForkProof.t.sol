@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 
 /// Fork-proof of the Lux tokenomics on-chain split against LIVE mainnet 96369.
-/// Run: forge test --fork-url http://localhost:19630/v1/bc/C/rpc -vv
+/// Run: forge test --fork-url http://localhost:19630/v1/chain/C/rpc -vv
 contract ForkProof is Test {
     // --- live mainnet addresses (verified on chain 96369) ---
     address constant DAO_SAFE  = 0x51284dC2133e8d3a8e213DCa6a6FA768cfDfcce2; // Lux DAO Safe (1T)

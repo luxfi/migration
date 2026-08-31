@@ -19,7 +19,7 @@ KPOD = os.environ.get("KPOD", "luxd-1")
 def rpc(batch):
     body = json.dumps(batch).encode()
     p = subprocess.run(["kubectl","--context",KCTX,"-n",KNS,"exec","-i",KPOD,"--",
-        "curl","-s","-X","POST","http://localhost:9630/v1/bc/C/rpc",
+        "curl","-s","-X","POST","http://localhost:9630/v1/chain/C/rpc",
         "-H","content-type:application/json","-d","@-"], input=body, capture_output=True, timeout=180)
     return json.loads(p.stdout)
 

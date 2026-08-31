@@ -24,7 +24,7 @@ def _rpc(batch):
     body = json.dumps(batch).encode()
     p = subprocess.run(
         ["kubectl", "--context", KCTX, "-n", KNS, "exec", "-i", KPOD, "--",
-         "curl", "-s", "-X", "POST", "http://localhost:9630/v1/bc/C/rpc",
+         "curl", "-s", "-X", "POST", "http://localhost:9630/v1/chain/C/rpc",
          "-H", "content-type:application/json", "-d", "@-"],
         input=body, capture_output=True, timeout=180)
     return json.loads(p.stdout)
@@ -165,7 +165,7 @@ def main():
 
     snapshot = dict(
         owner=OWNER, npm=NPM, factory=FACTORY,
-        blockRpc=f"kubectl exec -n {KNS} {KPOD} -- curl localhost:9630/v1/bc/C/rpc",
+        blockRpc=f"kubectl exec -n {KNS} {KPOD} -- curl localhost:9630/v1/chain/C/rpc",
         positions=positions,
         pools=[{**v, "token0sym": tokmeta[v["token0"]]["symbol"], "token1sym": tokmeta[v["token1"]]["symbol"],
                 "dec0": tokmeta[v["token0"]]["decimals"], "dec1": tokmeta[v["token1"]]["decimals"]}

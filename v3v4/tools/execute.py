@@ -74,7 +74,7 @@ U128MAX = (1 << 128) - 1
 _id = [0]
 def _kexec(pod, body):
     p = subprocess.run(["kubectl", "--context", KCTX, "-n", KNS, "exec", "-i", pod, "--",
-                        "curl", "-s", "-X", "POST", "http://localhost:9630/v1/bc/C/rpc",
+                        "curl", "-s", "-X", "POST", "http://localhost:9630/v1/chain/C/rpc",
                         "-H", "content-type:application/json", "-d", "@-"],
                        input=body, capture_output=True, timeout=200)
     if p.returncode != 0:

@@ -30,8 +30,8 @@ mount_ok(){ read_json "$1" /scripts/cchain-upgrade.json      | grep -q '^su=1 ac
 ref_tip(){ local rp=$1 port=$2
   pkill -f "port-forward.*$NS.*$rp $port" 2>/dev/null; sleep 1
   kubectl --context $CTX -n $NS port-forward pod/$rp $port:9630 >/tmp/pf-rt.log 2>&1 &
-  for i in $(seq 1 12); do sleep 1; cast chain-id --rpc-url http://127.0.0.1:$port/v1/bc/C/rpc 2>/dev/null | grep -q 96369 && break; done
-  cast block-number --rpc-url http://127.0.0.1:$port/v1/bc/C/rpc 2>/dev/null
+  for i in $(seq 1 12); do sleep 1; cast chain-id --rpc-url http://127.0.0.1:$port/v1/chain/C/rpc 2>/dev/null | grep -q 96369 && break; done
+  cast block-number --rpc-url http://127.0.0.1:$port/v1/chain/C/rpc 2>/dev/null
   pkill -f "port-forward.*$NS.*$rp $port" 2>/dev/null; }
 
 for n in 0 1 2 3 4; do
@@ -56,7 +56,7 @@ for n in 0 1 2 3 4; do
   h=""; for t in $(seq 1 24); do
     pkill -f "port-forward.*$NS.*luxd-$n 198$((60+n))" 2>/dev/null
     kubectl --context $CTX -n $NS port-forward pod/luxd-$n 198$((60+n)):9630 >/tmp/pf-rj$n.log 2>&1 &
-    sleep 4; h=$(cast block-number --rpc-url http://127.0.0.1:198$((60+n))/v1/bc/C/rpc 2>/dev/null)
+    sleep 4; h=$(cast block-number --rpc-url http://127.0.0.1:198$((60+n))/v1/chain/C/rpc 2>/dev/null)
     [ -n "$h" ] && [ -n "$TIP" ] && [ "$h" -ge "$TIP" ] 2>/dev/null && break; sleep 4
   done
   pkill -f "port-forward.*$NS.*luxd-$n 198$((60+n))" 2>/dev/null

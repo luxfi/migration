@@ -21,7 +21,7 @@
 # Usage: RPC=<c-chain-rpc> SAFE=<0xDaoSafe> OUT=<path> python3 gen_ownership_manifest.py
 import json, os, sys, urllib.request
 
-RPC  = os.environ.get("RPC", "http://127.0.0.1:19630/v1/bc/C/rpc")
+RPC  = os.environ.get("RPC", "http://127.0.0.1:19630/v1/chain/C/rpc")
 SAFE = os.environ.get("SAFE", "0x51284dC2133e8d3a8e213DCa6a6FA768cfDfcce2").lower().replace("0x","")
 OUT  = os.environ.get("OUT", os.path.join(os.path.dirname(__file__), "..", "manifests",
                                           "96369-ownership.stateupgrade.json"))

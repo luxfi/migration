@@ -39,8 +39,8 @@ else
   for n in 0 1 2 3 4; do
     ip=$(kubectl --context $CTX -n lux-mainnet get svc "luxd-$n" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
     [ -z "$ip" ] && continue
-    h=$(cast block-number --rpc-url "http://$ip:9630/v1/bc/C/rpc" 2>/dev/null) || continue
-    [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/v1/bc/C/rpc"; }
+    h=$(cast block-number --rpc-url "http://$ip:9630/v1/chain/C/rpc" 2>/dev/null) || continue
+    [ "$h" -gt "$BESTH" ] 2>/dev/null && { BESTH=$h; BEST="http://$ip:9630/v1/chain/C/rpc"; }
   done
 fi
 [ -n "$BEST" ] || { echo "ABORT: no reachable node"; exit 1; }

@@ -10,7 +10,7 @@ PORT=8546; LRPC="http://127.0.0.1:$PORT"; CID=1337
 REC="/tmp/lux-mig-1337-deployments"      # scratch records (never touch the public standard/ tree)
 DAO_ALLOC=1000000000000; RESERVE=1000
 hexwei() { python3 -c "print(hex(int($1)))"; }
-cleanup() { kill "${ANVIL_PID:-0}" 2>/dev/null; }
+cleanup() { kill "${ANVIL_PID:-0}" 2>/dev/null; anvil_state_sweep; }
 trap cleanup EXIT
 rm -rf "$REC"; mkdir -p "$REC"
 
@@ -32,6 +32,7 @@ echo "  mirror 0x9011=$(lux $S9_LIVE) LUX + ${#EOA_ADDRS[@]} EOAs"
 
 hdr "1. start fresh anvil chainId 1337 (no fork) and seed balances"
 pkill -f "anvil.*$PORT" 2>/dev/null; sleep 1
+anvil_state_mark
 anvil --port "$PORT" --chain-id "$CID" --silent >/tmp/local1337_anvil.log 2>&1 &
 ANVIL_PID=$!
 wait_ready "$LRPC"; assert_local "$LRPC"

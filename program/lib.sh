@@ -80,3 +80,18 @@ summary() { # <name>
   [ "$FAILED" -eq 0 ] && { printf '\033[32m*** %s: PASS ***\033[0m\n' "$1"; return 0; } \
                        || { printf '\033[31m*** %s: FAIL ***\033[0m\n' "$1"; return 1; }
 }
+
+# Anvil leaves its state dump behind. Nine of them reached 508 GB under
+# ~/.foundry/anvil/tmp before anyone noticed — one was 305 GB — because every
+# cleanup here killed the process and stopped there. Record what exists before
+# anvil starts, remove what it added on the way out.
+ANVIL_STATE_DIR="${ANVIL_STATE_DIR:-$HOME/.foundry/anvil/tmp}"
+anvil_state_mark() {
+  ANVIL_STATE_BEFORE="$(ls -1 "$ANVIL_STATE_DIR" 2>/dev/null | sort)"
+}
+anvil_state_sweep() {
+  [ -d "$ANVIL_STATE_DIR" ] || return 0
+  local now; now="$(ls -1 "$ANVIL_STATE_DIR" 2>/dev/null | sort)"
+  comm -13 <(printf '%s\n' "$ANVIL_STATE_BEFORE") <(printf '%s\n' "$now") \
+    | while read -r d; do [ -n "$d" ] && rm -rf "${ANVIL_STATE_DIR:?}/$d"; done
+}

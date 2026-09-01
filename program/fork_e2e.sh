@@ -13,7 +13,7 @@ PORT=8545; FRPC="http://127.0.0.1:$PORT"
 DAO_ALLOC=1000000000000   # 1T (tokenomics split)
 RESERVE=1000
 hexwei() { python3 -c "print(hex(int($1)))"; }
-cleanup() { kill "${ANVIL_PID:-0}" 2>/dev/null; }
+cleanup() { kill "${ANVIL_PID:-0}" 2>/dev/null; anvil_state_sweep; }
 trap cleanup EXIT
 
 hdr "0. select a CAUGHT-UP mainnet node (max head; public RPC is round-robin/stale)"
@@ -30,6 +30,7 @@ echo "  -> fork base: luxd-$BESTN head=$BESTH  $BEST"
 
 hdr "1. start anvil fork at LATEST (coreth prunes history -> must fork head)"
 pkill -f "anvil.*$PORT" 2>/dev/null; sleep 1
+anvil_state_mark
 anvil --fork-url "$BEST" --port "$PORT" --silent >/tmp/fork_e2e_anvil.log 2>&1 &
 ANVIL_PID=$!
 wait_ready "$FRPC"; assert_local "$FRPC"

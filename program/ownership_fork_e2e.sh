@@ -27,7 +27,7 @@ ok(){ echo "  PASS: $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
 low(){ echo "$1" | tr 'A-F' 'a-f'; }
 eq(){ [ "$(low "$2")" = "$(low "$3")" ] && ok "$1" || no "$1 ($2 != $3)"; }
-cleanup(){ kill "${ANVIL_PID:-0}" 2>/dev/null; rm -rf "$TMP"; }
+cleanup(){ kill "${ANVIL_PID:-0}" 2>/dev/null; rm -rf "$TMP"; anvil_state_sweep; }
 trap cleanup EXIT
 getter_for(){ case " $V2FACS " in *" $(low "${1#0x}") "*) echo 'feeToSetter()(address)';; *) echo 'owner()(address)';; esac; }
 
@@ -49,6 +49,7 @@ echo "  manifest: $FRAG"
 
 echo "1. start anvil fork at head"
 pkill -f "anvil.*$PORT" 2>/dev/null; sleep 1
+anvil_state_mark
 anvil --fork-url "$BEST" --port "$PORT" --silent >/tmp/own_fork_anvil.log 2>&1 & ANVIL_PID=$!
 for i in $(seq 1 40); do cast chain-id --rpc-url "$FRPC" >/dev/null 2>&1 && break; sleep 1; done
 eq "fork chainId" "$(cast chain-id --rpc-url "$FRPC")" "96369"

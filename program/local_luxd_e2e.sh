@@ -16,7 +16,7 @@ export FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 
 PORT="${PORT:-9760}"; STAKE_PORT=$((PORT + 1))
 BASE="${BASE:-$HOME/.lux/local-luxd-e2e}"
-RPC="http://127.0.0.1:$PORT/v1/bc/C/rpc"
+RPC="http://127.0.0.1:$PORT/v1/chain/C/rpc"
 OWNER=0x9011E888251AB053B7bD1cdB598Db4f9DEd94714
 GENESIS="${GENESIS:-$HOME/work/lux/genesis/live/mainnet/genesis.json}"
 LUXD="${LUXD:-$HOME/work/lux/node/build/luxd}"
